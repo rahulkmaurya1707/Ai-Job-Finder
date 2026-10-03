@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobPilot AI — Autonomous LLM Job Search Agent</title>
+    <meta name="description" content="Your autonomous AI agent that scans job platforms 24/7, scores compatibility (0-100%), analyzes skill gaps, and delivers high-match alerts to Telegram.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <style>
+        /* ==========================================================================
+           JOBPILOT AI - SAAS DESIGN SYSTEM & THEME TOKENS
+           ========================================================================== */
+        :root {
+            /* Light Theme Tokens */
+            --bg-canvas: #F8FAFC;
+            --bg-surface: #FFFFFF;
+            --bg-surface-elevated: #F1F5F9;
+            --border-color: #E2E8F0;
+            --border-hover: #CBD5E1;
+            
+            --text-primary: #0F172A;
+            --text-secondary: #475569;
+            --text-muted: #64748B;
+            
+            --primary-indigo: #4F46E5;
+            --primary-hover: #4338CA;
+            --secondary-cyan: #06B6D4;
+            --cyan-light: rgba(6, 182, 212, 0.12);
+            --gradient-cta: linear-gradient(135deg, #8B5CF6, #EC4899);
+            --gradient-cta-hover: linear-gradient(135deg, #7C3AED, #DB2777);
+            
+            --match-green: #16A34A;
+            --match-green-bg: #DCFCE7;
+            --match-amber: #D97706;
+            --match-amber-bg: #FEF3C7;
+            --match-red: #DC2626;
+            --match-red-bg: #FEF2F2;
+            
+            --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05);
+            --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
+            --shadow-lg: 0 10px 30px rgba(15, 23, 42, 0.12);
+            --shadow-glow: 0 0 40px rgba(79, 70, 229, 0.15);
+            
+            --radius-sm: 8px;
+            --radius-md: 14px;
+            --radius-lg: 20px;
+            --radius-full: 9999px;
+            
+            --transition-fast: 0.15s ease;
+            --transition-smooth: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        [data-theme="dark"] {
+            /* Dark Theme Tokens (Default) */
+            --bg-canvas: #0B1020;
+            --bg-surface: #131A2E;
+            --bg-surface-elevated: #1E293B;
+            --border-color: #1E293B;
+            --border-hover: #334155;
+            
+            --text-primary: #F8FAFC;
+            --text-secondary: #CBD5E1;
+            --text-muted: #94A3B8;
+            
+            --primary-indigo: #6366F1;
+            --primary-hover: #4F46E5;
+            --secondary-cyan: #22D3EE;
+            --cyan-light: rgba(34, 211, 238, 0.15);
+            --gradient-cta: linear-gradient(135deg, #8B5CF6, #EC4899);
+            --gradient-cta-hover: linear-gradient(135deg, #A855F7, #F43F5E);
+            
+            --match-green: #22C55E;
+            --match-green-bg: rgba(34, 197, 94, 0.15);
+            --match-amber: #F59E0B;
+            --match-amber-bg: rgba(245, 158, 11, 0.15);
+            --match-red: #EF4444;
+            --match-red-bg: rgba(239, 68, 68, 0.15);
+            
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+            --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
+            --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.7);
+            --shadow-glow: 0 0 50px rgba(99, 102, 241, 0.25);
+        }
+
+        /* Global Resets */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; font-size: 16px; }
+        body {
+            background-color: var(--bg-canvas);
+            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            overflow-x: hidden;
+            transition: background-color var(--transition-smooth), color var(--transition-smooth);
+        }
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 700;
+            line-height: 1.25;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+        p { color: var(--text-secondary); }
+        a { color: inherit; text-decoration: none; }
+        button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+        img { max-width: 100%; height: auto; display: block; }
+        
+        .container { max-width: 1240px; margin: 0 auto; padding: 0 1.5rem; }
+        .section-padding { padding: 5rem 0; }
+        
+        .text-gradient {
+            background: var(--gradient-cta);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .badge-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background-color: var(--cyan-light);
+            color: var(--secondary-cyan);
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 0.35rem 0.85rem;
+            border-radius: var(--radius-full);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(34, 211, 238, 0.2);
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+            padding: 0.85rem 1.75rem;
+            border-radius: var(--radius-md);
+            transition: all var(--transition-fast);
+        }
+        .btn-primary {
+            background: var(--gradient-cta);
+            color: #FFFFFF;
+            box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(139, 92, 246, 0.5);
+        }
+        .btn-secondary {
+            background-color: var(--bg-surface-elevated);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        .btn-secondary:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-2px);
+        }
+
+        /* Sticky Navigation Bar */
+        .header-nav {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background-color: rgba(11, 16, 32, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color var(--transition-smooth);
+        }
+        [data-theme="light"] .header-nav {
+            background-color: rgba(248, 250, 252, 0.85);
+        }
+        .nav-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 76px;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: var(--text-primary);
+        }
+        .logo-icon {
+            width: 38px;
+            height: 38px;
+            background: var(--gradient-cta);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #FFFFFF;
+            font-size: 1.2rem;
+            box-shadow: 0 2px 10px rgba(139, 92, 246, 0.4);
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            list-style: none;
+        }
+        .nav-link {
+            font-size: 0.92rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: color var(--transition-fast);
+        }
+        .nav-link:hover { color: var(--secondary-cyan); }
+        .nav-actions { display: flex; align-items: center; gap: 1rem; }
+        .theme-toggle-btn {
+            background-color: var(--bg-surface-elevated);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-full);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            transition: all var(--transition-fast);
+        }
+        .theme-toggle-btn:hover { border-color: var(--border-hover); transform: scale(1.05); }
+
+        /* Hero Section */
+        .hero-section {
+            padding: 4rem 0 6rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+        }
+        .hero-title {
+            font-size: 3.3rem;
+            margin-bottom: 1.25rem;
+            letter-spacing: -0.03em;
+        }
+        .hero-subtext {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            max-width: 520px;
+        }
+        .hero-cta-group {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+        }
+        .hero-stats-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 1.5rem;
+        }
+        .stat-item-num {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+        .stat-item-label { font-size: 0.8rem; color: var(--text-muted); }
+
+        /* Hero Mockup Visual */
+        .hero-visual-container {
+            position: relative;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            box-shadow: var(--shadow-lg), var(--shadow-glow);
+            transition: transform var(--transition-smooth);
+        }
+        .hero-visual-container:hover { transform: translateY(-4px); }
+        .hero-mockup-img {
+            border-radius: var(--radius-md);
+            width: 100%;
+            object-fit: cover;
+        }
+
+        /* 4-Step Workflow Section */
+        .section-header { text-align: center; max-width: 650px; margin: 0 auto 3.5rem auto; }
+        .section-title { font-size: 2.3rem; margin-bottom: 0.75rem; }
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+            position: relative;
+        }
+        .step-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 2rem 1.5rem;
+            box-shadow: var(--shadow-sm);
+            text-align: center;
+            transition: transform var(--transition-smooth);
+        }
+        .step-card:hover { transform: translateY(-4px); border-color: var(--border-hover); }
+        .step-num-badge {
+            width: 44px;
+            height: 44px;
+            background: var(--gradient-cta);
+            color: #FFFFFF;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.1rem;
+            margin: 0 auto 1.25rem auto;
+        }
+
+        /* Features Grid (6 Cards) */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+        }
+        .feature-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 2rem;
+            box-shadow: var(--shadow-sm);
+            transition: all var(--transition-smooth);
+        }
+        .feature-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
+        }
+        .feature-icon {
+            width: 52px;
+            height: 52px;
+            background: var(--cyan-light);
+            color: var(--secondary-cyan);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        /* Terminal Simulator */
+        .terminal-card {
+            background-color: #050811;
+            border: 1px solid #1E293B;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow-lg);
+        }
+        .terminal-header {
+            background-color: #0E1626;
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #1E293B;
+        }
+        .terminal-dots { display: flex; gap: 0.4rem; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .dot-red { background-color: #EF4444; }
+        .dot-yellow { background-color: #F59E0B; }
+        .dot-green { background-color: #10B981; }
+        .terminal-title { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #94A3B8; }
+        .terminal-body {
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.88rem;
+            color: #38BDF8;
+            line-height: 1.8;
+            min-height: 200px;
+        }
+
+        /* Telegram Section Split */
+        .telegram-container {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 3.5rem;
+        }
+        .telegram-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3.5rem;
+            align-items: center;
+        }
+
+        /* Dashboard Preview Section */
+        .dashboard-preview-box {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2.5rem;
+            box-shadow: var(--shadow-lg);
+        }
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.25rem;
+            margin-bottom: 2rem;
+        }
+        .kpi-card {
+            background-color: var(--bg-surface-elevated);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1.25rem;
+        }
+        .kpi-num {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.7rem;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        /* Job Cards inside Dashboard */
+        .job-card-box {
+            background-color: var(--bg-canvas);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: transform var(--transition-fast);
+        }
+        .job-card-box:hover { transform: translateY(-2px); border-color: var(--border-hover); }
+        .score-ring {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            background: var(--match-green-bg);
+            color: var(--match-green);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-weight: 800;
+            font-size: 1rem;
+            border: 2px solid var(--match-green);
+        }
+        .chip-green {
+            background-color: var(--match-green-bg);
+            color: var(--match-green);
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.2rem 0.55rem;
+            border-radius: 6px;
+            display: inline-block;
+            margin-right: 0.3rem;
+        }
+        .chip-red {
+            background-color: var(--match-red-bg);
+            color: var(--match-red);
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.2rem 0.55rem;
+            border-radius: 6px;
+            display: inline-block;
+            margin-right: 0.3rem;
+        }
+
+        /* Resume Upload Modal Drawer */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(11, 16, 32, 0.75);
+            backdrop-filter: blur(6px);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--transition-smooth);
+        }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+        .modal-box {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            width: 600px;
+            max-width: 90%;
+            padding: 2.5rem;
+            box-shadow: var(--shadow-lg);
+        }
+        .dropzone {
+            border: 2px dashed var(--secondary-cyan);
+            border-radius: var(--radius-md);
+            padding: 3rem 1.5rem;
+            text-align: center;
+            background-color: var(--cyan-light);
+            cursor: pointer;
+            transition: background var(--transition-fast);
+        }
+        .dropzone:hover { background-color: rgba(34, 211, 238, 0.25); }
+
+        /* Pricing Grid */
+        .pricing-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2rem; max-width: 850px; margin: 0 auto; }
+        .pricing-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2.5rem 2rem;
+            position: relative;
+        }
+        .pricing-card.featured {
+            border-color: var(--primary-indigo);
+            box-shadow: var(--shadow-lg), var(--shadow-glow);
+        }
+
+        /* Footer */
+        .site-footer {
+            background-color: var(--bg-surface);
+            border-top: 1px solid var(--border-color);
+            padding: 4rem 0 2rem 0;
+            margin-top: 5rem;
+        }
+        .footer-grid { display: grid; grid-template-columns: 2fr repeat(3, 1fr); gap: 3rem; margin-bottom: 3rem; }
+
+        /* Toast */
+        .toast {
+            position: fixed; bottom: 30px; right: 30px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--secondary-cyan);
+            padding: 1rem 1.5rem;
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-lg);
+            z-index: 3000;
+            display: flex; align-items: center; gap: 0.75rem;
+            transform: translateY(100px); opacity: 0;
+            transition: all var(--transition-smooth);
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+
+        @media (max-width: 992px) {
+            .hero-grid, .telegram-grid, .features-grid, .steps-grid, .kpi-row, .pricing-grid, .footer-grid {
+                grid-template-columns: 1fr;
+            }
+            .hero-title { font-size: 2.4rem; }
+            .nav-links { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- STICKY NAVIGATION BAR -->
+    <header class="header-nav">
+        <div class="container">
+            <div class="nav-wrapper">
+                <a href="#" class="logo">
+                    <div class="logo-icon">🚀</div>
+                    <span>JobPilot <span class="text-gradient">AI</span></span>
+                </a>
+                
+                <ul class="nav-links">
+                    <li><a href="#how-it-works" class="nav-link">Workflow</a></li>
+                    <li><a href="#features" class="nav-link">Features</a></li>
+                    <li><a href="#demo" class="nav-link">Live Terminal</a></li>
+                    <li><a href="#telegram" class="nav-link">Telegram Bot</a></li>
+                    <li><a href="#dashboard" class="nav-link">Dashboard</a></li>
+                    <li><a href="#pricing" class="nav-link">Pricing</a></li>
+                </ul>
+
+                <div class="nav-actions">
+                    <button class="theme-toggle-btn" id="themeToggle" title="Toggle Light/Dark Mode">🌙</button>
+                    <button class="btn btn-primary" onclick="openResumeModal()">Upload Resume ⚡</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- HERO SECTION -->
+    <section class="hero-section">
+        <div class="container">
+            <div class="hero-grid">
+                <div>
+                    <div class="badge-pill">🤖 AGENTIC LLM JOB SEARCH 2.0</div>
+                    <h1 class="hero-title">Your AI Agent That Finds & Matches Your <span class="text-gradient">Dream Job</span></h1>
+                    <p class="hero-subtext">Upload your resume once. Our autonomous LLM agent scans job platforms 24/7, scores compatibility (0-100%), reveals skill gaps, and fires instant alerts straight to your Telegram.</p>
+                    
+                    <div class="hero-cta-group">
+                        <button class="btn btn-primary" onclick="openResumeModal()">Upload Resume & Launch Agent ⚡</button>
+                        <a href="#dashboard" class="btn btn-secondary">Explore Live Dashboard 📊</a>
+                    </div>
+
+                    <div class="hero-stats-row">
+                        <div>
+                            <div class="stat-item-num">12,400+</div>
+                            <div class="stat-item-label">Active Agents</div>
+                        </div>
+                        <div>
+                            <div class="stat-item-num">98.4%</div>
+                            <div class="stat-item-label">Match Precision</div>
+                        </div>
+                        <div>
+                            <div class="stat-item-num">&lt; 2s</div>
+                            <div class="stat-item-label">Telegram Alert Speed</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hero-visual-container">
+                    <img src="assets/hero_agent.jpg" alt="JobPilot AI Agent Match Visual" class="hero-mockup-img">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- WORKFLOW SECTION (4 STEPS) -->
+    <section class="section-padding" id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <div class="badge-pill">AUTONOMOUS WORKFLOW</div>
+                <h2 class="section-title">How JobPilot AI Works in 4 Steps</h2>
+                <p>Set up your autonomous search agent in less than 2 minutes.</p>
+            </div>
+
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-num-badge">1</div>
+                    <h3 style="margin-bottom:0.6rem;">Upload Resume</h3>
+                    <p style="font-size:0.9rem;">Upload PDF or DOCX. AI extracts candidate skills, seniority level, and target role goals.</p>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-num-badge">2</div>
+                    <h3 style="margin-bottom:0.6rem;">AI Scans Job Boards</h3>
+                    <p style="font-size:0.9rem;">Agent queries RemoteOK, LinkedIn, WeWorkRemotely, Indeed, and Naukri 24/7 in background.</p>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-num-badge">3</div>
+                    <h3 style="margin-bottom:0.6rem;">Smart Match Scoring</h3>
+                    <p style="font-size:0.9rem;">LLM evaluates each posting, computes 0-100% match score, and pinpoints missing skill gaps.</p>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-num-badge">4</div>
+                    <h3 style="margin-bottom:0.6rem;">Telegram Alerts</h3>
+                    <p style="font-size:0.9rem;">Receive instant high-match notifications with job summary, score breakdown, and quick apply link.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- LIVE TERMINAL DEMO -->
+    <section class="section-padding" id="demo">
+        <div class="container">
+            <div class="section-header">
+                <div class="badge-pill">AGENT TERMINAL INSPECTOR</div>
+                <h2 class="section-title">Watch the Autonomous Agent Run</h2>
+                <p>Live simulation of LLM agent tool calling, match scoring, and Telegram alert dispatches.</p>
+            </div>
+
+            <div class="terminal-card">
+                <div class="terminal-header">
+                    <div class="terminal-dots">
+                        <span class="dot dot-red"></span>
+                        <span class="dot dot-yellow"></span>
+                        <span class="dot dot-green"></span>
+                    </div>
+                    <div class="terminal-title">agent_execution_runtime.log — JobPilot LLM Engine</div>
+                    <div>🟢 Active</div>
+                </div>
+                <div class="terminal-body" id="terminalLog">
+                    [00:01] 🚀 Initializing JobPilot AI Agent for candidate: Rahul Kumar Maurya...<br>
+                    [00:02] 📄 Loaded candidate profile: Full-Stack Engineer (Skills: React, Node.js, Python, PostgreSQL)<br>
+                    [00:04] 🌐 Executing MCP Tool query: RemoteOK & WeWorkRemotely job portals...<br>
+                    [00:06] 🔍 Fetched 120 fresh job postings. Running Groq LLM evaluation...<br>
+                    [00:08] ⚡ Matched Job #1: 'Senior Software Engineer' at TechNova Solutions (Match Score: 94%)<br>
+                    [00:09] 🎯 Matched Skills: ✅ React, ✅ Node.js, ✅ Python | Missing Skills: ⚠️ Docker, ⚠️ CI/CD<br>
+                    [00:10] 📲 Dispatching high-priority alert to Telegram Bot @Rahul_Maurya_Bot... Done!
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TELEGRAM INTEGRATION SECTION -->
+    <section class="section-padding" id="telegram">
+        <div class="container">
+            <div class="telegram-container">
+                <div class="telegram-grid">
+                    <div>
+                        <div class="badge-pill">ZERO FRICTION ALERTS</div>
+                        <h2 class="section-title">Instant Telegram Bot Notifications</h2>
+                        <p>Never miss a high-priority opening again. Get instant updates directly in your preferred messaging app.</p>
+                        
+                        <div style="margin: 2rem 0;">
+                            <div style="display:flex; gap:1rem; margin-bottom:1.25rem;">
+                                <div style="width:32px; height:32px; background:var(--cyan-light); color:var(--secondary-cyan); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700;">1</div>
+                                <div>
+                                    <div style="font-weight:700;">Start Telegram Bot</div>
+                                    <div style="font-size:0.88rem; color:var(--text-muted);">Click start on <b>@JobPilot_AI_Bot</b></div>
+                                </div>
+                            </div>
+                            <div style="display:flex; gap:1rem; margin-bottom:1.25rem;">
+                                <div style="width:32px; height:32px; background:var(--cyan-light); color:var(--secondary-cyan); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700;">2</div>
+                                <div>
+                                    <div style="font-weight:700;">Set Alert Filter</div>
+                                    <div style="font-size:0.88rem; color:var(--text-muted);">Receive alerts only for matches &ge; 80%</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary" onclick="showToast('Test message sent to Telegram bot!')">Send Test Alert to Telegram 📲</button>
+                    </div>
+
+                    <div style="text-align: center;">
+                        <img src="assets/telegram_mockup.jpg" alt="Telegram Bot Notification Mockup" style="max-height: 420px; margin: 0 auto; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- DASHBOARD PREVIEW TAB SECTION -->
+    <section class="section-padding" id="dashboard">
+        <div class="container">
+            <div class="section-header">
+                <div class="badge-pill">CANDIDATE DASHBOARD</div>
+                <h2 class="section-title">Live Job Matches & Skill Insights</h2>
+                <p>Inspect ranked job matches, track applications, and view AI recommendations.</p>
+            </div>
+
+            <div class="dashboard-preview-box">
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div style="font-size:0.8rem; color:var(--text-muted);">Jobs Scanned</div>
+                        <div class="kpi-num">120</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div style="font-size:0.8rem; color:var(--text-muted);">Top Matches (&ge;80%)</div>
+                        <div class="kpi-num" style="color:var(--match-green);">14</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div style="font-size:0.8rem; color:var(--text-muted);">Applications Tracked</div>
+                        <div class="kpi-num" style="color:var(--secondary-cyan);">5</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div style="font-size:0.8rem; color:var(--text-muted);">Telegram Alerts</div>
+                        <div class="kpi-num" style="color:var(--primary-indigo);">8</div>
+                    </div>
+                </div>
+
+                <!-- Job Card 1 -->
+                <div class="job-card-box">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <h3 style="font-size:1.15rem;">Senior Software Engineer</h3>
+                            <div style="font-size:0.88rem; color:var(--text-muted); margin-top:0.2rem;">🏢 TechNova Solutions • 📍 Remote | San Francisco • Portal: <code>RemoteOK</code></div>
+                            <div style="margin-top:0.75rem;">
+                                <span class="chip-green">✅ Python</span>
+                                <span class="chip-green">✅ React</span>
+                                <span class="chip-green">✅ Node.js</span>
+                                <span class="chip-red">⚠️ Docker</span>
+                                <span class="chip-red">⚠️ CI/CD</span>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:1rem;">
+                            <div class="score-ring">94%</div>
+                            <button class="btn btn-primary" style="padding:0.55rem 1.1rem; font-size:0.85rem;" onclick="showToast('Applied to Senior Software Engineer!')">Apply ⚡</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Job Card 2 -->
+                <div class="job-card-box">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <h3 style="font-size:1.15rem;">Full Stack Developer</h3>
+                            <div style="font-size:0.88rem; color:var(--text-muted); margin-top:0.2rem;">🏢 DataCore Labs • 📍 Remote | New York • Portal: <code>WeWorkRemotely</code></div>
+                            <div style="margin-top:0.75rem;">
+                                <span class="chip-green">✅ React</span>
+                                <span class="chip-green">✅ PostgreSQL</span>
+                                <span class="chip-red">⚠️ AWS</span>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:1rem;">
+                            <div class="score-ring" style="border-color:var(--match-amber); color:var(--match-amber); background:var(--match-amber-bg);">82%</div>
+                            <button class="btn btn-primary" style="padding:0.55rem 1.1rem; font-size:0.85rem;" onclick="showToast('Applied to Full Stack Developer!')">Apply ⚡</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PRICING SECTION -->
+    <section class="section-padding" id="pricing">
+        <div class="container">
+            <div class="section-header">
+                <div class="badge-pill">TRANSPARENT PLANS</div>
+                <h2 class="section-title">Choose Your Agentic Search Plan</h2>
+            </div>
+
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <h3>Starter Agent</h3>
+                    <p style="font-size:0.9rem;">Perfect for students & fresh graduates searching for entry-level roles.</p>
+                    <div style="font-size:2.5rem; font-weight:800; margin:1rem 0;">$0 <span style="font-size:1rem; color:var(--text-muted);">/ month</span></div>
+                    <ul style="list-style:none; margin-bottom:2rem; font-size:0.92rem; color:var(--text-secondary);">
+                        <li style="margin-bottom:0.6rem;">✓ 24/7 Autonomous Job Scanning</li>
+                        <li style="margin-bottom:0.6rem;">✓ Up to 15 Shortlisted Jobs</li>
+                        <li style="margin-bottom:0.6rem;">✓ LLM Match Score (0-100%)</li>
+                        <li style="margin-bottom:0.6rem;">✓ Standard Telegram Alerts</li>
+                    </ul>
+                    <button class="btn btn-secondary" style="width:100%;" onclick="openResumeModal()">Start Free 🚀</button>
+                </div>
+
+                <div class="pricing-card featured">
+                    <div style="position:absolute; top:-12px; left:50%; transform:translateX(-50%); background:var(--gradient-cta); color:#FFF; font-size:0.75rem; font-weight:700; padding:0.2rem 0.8rem; border-radius:9999px;">MOST POPULAR</div>
+                    <h3>Pro Agent</h3>
+                    <p style="font-size:0.9rem;">For active job seekers who want instant alerts & unlimited match tracking.</p>
+                    <div style="font-size:2.5rem; font-weight:800; margin:1rem 0;">$19 <span style="font-size:1rem; color:var(--text-muted);">/ month</span></div>
+                    <ul style="list-style:none; margin-bottom:2rem; font-size:0.92rem; color:var(--text-secondary);">
+                        <li style="margin-bottom:0.6rem;">✓ Unlimited Shortlist & Scans</li>
+                        <li style="margin-bottom:0.6rem;">✓ Instant Real-Time Telegram Bot Alerts</li>
+                        <li style="margin-bottom:0.6rem;">✓ Auto-Generated Cover Letters</li>
+                        <li style="margin-bottom:0.6rem;">✓ AI Resume Optimization Insights</li>
+                    </ul>
+                    <button class="btn btn-primary" style="width:100%;" onclick="openResumeModal()">Upgrade to Pro ⚡</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- RESUME UPLOAD MODAL -->
+    <div class="modal-overlay" id="resumeModal">
+        <div class="modal-box">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                <h3 style="font-size:1.3rem;">Upload Candidate Resume 📄</h3>
+                <button onclick="closeResumeModal()" style="background:none; border:none; font-size:1.5rem; color:var(--text-primary); cursor:pointer;">✕</button>
+            </div>
+            
+            <div class="dropzone" onclick="simulateUpload()">
+                <div style="font-size:2.5rem; margin-bottom:0.5rem;">📥</div>
+                <div style="font-weight:700; font-size:1.05rem;">Click or Drag & Drop Resume PDF/DOCX</div>
+                <div style="font-size:0.85rem; color:var(--text-muted); margin-top:0.3rem;">Encrypted with AES-256. Never shared.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div class="toast" id="toastNotification">
+        <span>✅</span>
+        <span id="toastMessage">Agent initialized!</span>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="site-footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div>
+                    <div class="logo" style="margin-bottom:1rem;">
+                        <div class="logo-icon">🚀</div>
+                        <span>JobPilot AI</span>
+                    </div>
+                    <p style="font-size:0.9rem; max-width:300px;">Autonomous LLM-powered job matching agent delivering instant high-fit opportunities straight to Telegram.</p>
+                </div>
+
+                <div>
+                    <h4 style="margin-bottom:1rem;">Product</h4>
+                    <p style="font-size:0.9rem; margin-bottom:0.5rem;"><a href="#how-it-works">Workflow</a></p>
+                    <p style="font-size:0.9rem; margin-bottom:0.5rem;"><a href="#demo">Agent Terminal</a></p>
+                    <p style="font-size:0.9rem; margin-bottom:0.5rem;"><a href="#dashboard">Dashboard</a></p>
+                </div>
+
+                <div>
+                    <h4 style="margin-bottom:1rem;">Integrations</h4>
+                    <p style="font-size:0.9rem; margin-bottom:0.5rem;"><a href="#telegram">Telegram Bot</a></p>
+                    <p style="font-size:0.9rem; margin-bottom:0.5rem;"><a href="#">Groq AI LLM</a></p>
+                    <p style="font-size:0.9rem; margin-bottom:0.5rem;"><a href="#">RemoteOK API</a></p>
+                </div>
+
+                <div>
+                    <h4 style="margin-bottom:1rem;">Stay Connected</h4>
+                    <p style="font-size:0.85rem; margin-bottom:0.75rem;">Get early access to new AI agent features.</p>
+                    <div style="display:flex; gap:0.5rem;">
+                        <input type="email" placeholder="Enter email..." style="padding:0.6rem; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-canvas); color:var(--text-primary); font-size:0.85rem; width:100%;">
+                        <button class="btn btn-primary" style="padding:0.6rem 1rem;">Join</button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align:center; border-top:1px solid var(--border-color); padding-top:2rem; font-size:0.85rem; color:var(--text-muted);">
+                © 2026 JobPilot AI INC. All Rights Reserved. Designed with WCAG AA accessibility standards.
+            </div>
+        </div>
+    </footer>
+
+    <!-- JAVASCRIPT CONTROLS -->
+    <script>
+        // Light / Dark Theme Switcher
+        const themeToggleBtn = document.getElementById('themeToggle');
+        const htmlElement = document.documentElement;
+
+        themeToggleBtn.addEventListener('click', () => {
+            const currentTheme = htmlElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            htmlElement.setAttribute('data-theme', newTheme);
+            themeToggleBtn.textContent = newTheme === 'dark' ? '🌙' : '☀️';
+        });
+
+        // Resume Modal Controls
+        function openResumeModal() {
+            document.getElementById('resumeModal').classList.add('active');
+        }
+        function closeResumeModal() {
+            document.getElementById('resumeModal').classList.remove('active');
+        }
+
+        function simulateUpload() {
+            closeResumeModal();
+            showToast('Resume uploaded! AI Agent parsed skills & scanning jobs...');
+        }
+
+        // Toast System
+        function showToast(msg) {
+            const toast = document.getElementById('toastNotification');
+            document.getElementById('toastMessage').textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+    </script>
+</body>
+</html>

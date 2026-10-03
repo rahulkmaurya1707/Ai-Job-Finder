@@ -1,0 +1,11 @@
+{
+  "match_score_cutoff": 60,
+  "shortlist_size": 28,
+  "job_sources": [
+    "RemoteOK",
+    "WeWorkRemotely",
+    "LinkedIn",
+    "Indeed",
+    "Naukri"
+  ]
+}
