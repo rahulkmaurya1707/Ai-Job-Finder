@@ -60,7 +60,11 @@ if styles_path.exists():
 existing_profile = load_profile_from_json()
 candidate_name = existing_profile.name.strip() if (existing_profile and existing_profile.name and existing_profile.name.strip()) else "Candidate"
 first_name = candidate_name.split()[0] if candidate_name != "Candidate" else "Candidate"
-user_initials = "".join([p[0].upper() for p in candidate_name.split()[:2]]) if candidate_name != "Candidate" else "CP"
+import os
+
+# Check for required GROQ_API_KEY in cloud environments like Render
+if not os.getenv("GROQ_API_KEY"):
+    st.warning("⚠️ **GROQ_API_KEY** environment variable is missing. Add your `GROQ_API_KEY` under Render Environment Settings to activate LLM matching & cover letter generation.")
 
 # -----------------------------------------------------------------------------
 # GLOBAL UNIFIED STICKY TOP HEADER BAR

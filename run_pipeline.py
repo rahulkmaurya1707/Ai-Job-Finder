@@ -19,8 +19,15 @@ def main():
 
     profile = load_profile_from_json()
     if not profile:
-        logger.error("User profile not found in storage/user_profile.json")
-        raise RuntimeError("User profile not found in storage/user_profile.json")
+        profile = UserProfile(
+            name="Candidate",
+            skills=["Python", "JavaScript", "React", "Node.js", "SQL", "Git"],
+            preferred_roles=["Software Engineer", "Full-Stack Developer", "Frontend Developer"],
+            experience_years=0.0,
+            remote_ok=True,
+        )
+        save_profile_to_json(profile)
+        save_profile_to_db(profile)
 
     logger.info(f"Loaded Profile for: {profile.name}")
     logger.info(f"Preferred Roles: {profile.preferred_roles}")
