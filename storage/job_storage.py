@@ -56,6 +56,8 @@ def init_jobs_db(db_path: Path = DB_FILE) -> None:
                 source TEXT,
                 vector_similarity_score REAL,
                 match_score INTEGER,
+                matching_skills TEXT,
+                missing_skills TEXT,
                 recommendation TEXT,
                 one_line_reasoning TEXT,
                 is_seen INTEGER DEFAULT 0,
@@ -70,6 +72,10 @@ def init_jobs_db(db_path: Path = DB_FILE) -> None:
         # Migration check for existing databases
         cursor.execute("PRAGMA table_info(shortlisted_jobs)")
         existing_cols = [row[1] for row in cursor.fetchall()]
+        if "matching_skills" not in existing_cols:
+            cursor.execute("ALTER TABLE shortlisted_jobs ADD COLUMN matching_skills TEXT")
+        if "missing_skills" not in existing_cols:
+            cursor.execute("ALTER TABLE shortlisted_jobs ADD COLUMN missing_skills TEXT")
         if "is_seen" not in existing_cols:
             cursor.execute("ALTER TABLE shortlisted_jobs ADD COLUMN is_seen INTEGER DEFAULT 0")
         if "is_applied" not in existing_cols:
