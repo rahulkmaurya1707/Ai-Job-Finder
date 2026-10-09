@@ -4,7 +4,7 @@ from graph.state import GraphState
 from storage.profile_storage import load_profile_from_json
 from storage.job_storage import save_shortlist_to_db, save_evaluated_jobs
 from profile.user_profile import UserProfile
-from mcp_servers.server import (
+from mcp_client import (
     search_linkedin,
     search_naukri,
     search_indeed,
