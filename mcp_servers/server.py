@@ -67,7 +67,6 @@ def search_remotive(query: str, location: str = "") -> list:
     return search_remotive_jobs(query, location)
 
 
-
 @mcp.tool()
 def get_profile_resume_embedding(user_name: str = "Candidate") -> dict:
     """Query Chroma vector store for the current profile's resume embedding."""
@@ -91,7 +90,6 @@ def send_notification_tool(
     return send_notification(message=message, subject=subject, is_ping=is_ping)
 
 
-
 if __name__ == "__main__":
     import os
     import hmac
@@ -105,13 +103,12 @@ if __name__ == "__main__":
 
     class APIKeyMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
-            if request.url.path == "/mcp":
-                supplied_key = request.headers.get("X-API-Key", "")
-                if not hmac.compare_digest(supplied_key, api_key):
-                    return JSONResponse(
-                        {"error": "Unauthorized"},
-                        status_code=401,
-                    )
+            supplied_key = request.headers.get("X-API-Key", "")
+            if not hmac.compare_digest(supplied_key, api_key):
+                return JSONResponse(
+                    {"error": "Unauthorized"},
+                    status_code=401,
+                )
             return await call_next(request)
 
     app = mcp.streamable_http_app(host="0.0.0.0")
