@@ -16,12 +16,12 @@ CONFIG_JSON_FILE = BASE_DIR / "config" / "pipeline_config.json"
 def load_pipeline_config() -> Dict[str, Any]:
     """Load configurable pipeline parameters from editable config/pipeline_config.json."""
     default_config = {
-        "match_score_cutoff": int(os.getenv("MATCH_SCORE_CUTOFF", "60")),
-        "shortlist_size": int(os.getenv("FINAL_TOP_N_JOBS", "15")),
+        "match_score_cutoff": int(os.getenv("MATCH_SCORE_CUTOFF", "50")),
+        "shortlist_size": int(os.getenv("FINAL_TOP_N_JOBS", "20")),
         "job_sources": [
             s.strip()
             for s in os.getenv(
-                "JOB_SOURCES", "RemoteOK,WeWorkRemotely,LinkedIn,Indeed,Naukri"
+                "JOB_SOURCES", "RemoteOK,WeWorkRemotely,Jobicy,Arbeitnow,Remotive,LinkedIn,Indeed,Naukri"
             ).split(",")
             if s.strip()
         ],
@@ -57,16 +57,16 @@ class Config:
 
     @property
     def MATCH_SCORE_CUTOFF(self) -> int:
-        return load_pipeline_config().get("match_score_cutoff", 60)
+        return load_pipeline_config().get("match_score_cutoff", 50)
 
     @property
     def FINAL_TOP_N_JOBS(self) -> int:
-        return load_pipeline_config().get("shortlist_size", 15)
+        return load_pipeline_config().get("shortlist_size", 20)
 
     @property
     def JOB_SOURCES(self) -> List[str]:
         return load_pipeline_config().get(
-            "job_sources", ["RemoteOK", "WeWorkRemotely", "LinkedIn", "Indeed", "Naukri"]
+            "job_sources", ["RemoteOK", "WeWorkRemotely", "Jobicy", "Arbeitnow", "Remotive", "LinkedIn", "Indeed", "Naukri"]
         )
 
     TARGET_PORTALS: dict = field(

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Dict, Any
 from mcp_servers.server import mcp
 from config import get_logger
@@ -11,7 +12,11 @@ PING_KWARGS = {
     "search_indeed": {"query": "ping", "location": "Remote"},
     "search_remoteok": {"query": "ping", "location": "Remote"},
     "search_weworkremotely": {"query": "ping", "location": "Remote"},
+    "search_jobicy": {"query": "ping", "location": "Remote"},
+    "search_arbeitnow": {"query": "ping", "location": "Remote"},
+    "search_remotive": {"query": "ping", "location": "Remote"},
     "get_profile_resume_embedding": {"user_name": "ping_test"},
+    "search_resume_embeddings": {"query_text": "ping_test"},
     "send_notification_tool": {"message": "ping", "subject": "ping", "is_ping": True},
 }
 

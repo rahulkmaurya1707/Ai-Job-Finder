@@ -1,9 +1,8 @@
 import asyncio
-import logging
 from typing import Dict, Any, List
 from graph.state import GraphState
 from storage.profile_storage import load_profile_from_json
-from storage.job_storage import save_shortlist_to_db
+from storage.job_storage import save_shortlist_to_db, save_evaluated_jobs
 from profile.user_profile import UserProfile
 from mcp_servers.server import (
     search_linkedin,
@@ -11,6 +10,9 @@ from mcp_servers.server import (
     search_indeed,
     search_remoteok,
     search_weworkremotely,
+    search_jobicy,
+    search_arbeitnow,
+    search_remotive,
 )
 from graph.deduplicator import deduplicate_job_postings
 from graph.filters import filter_job_postings
@@ -26,10 +28,14 @@ logger = get_logger(__name__)
 SEARCH_TOOLS = [
     ("RemoteOK", search_remoteok),
     ("WeWorkRemotely", search_weworkremotely),
+    ("Jobicy", search_jobicy),
+    ("Arbeitnow", search_arbeitnow),
+    ("Remotive", search_remotive),
     ("LinkedIn", search_linkedin),
     ("Indeed", search_indeed),
     ("Naukri", search_naukri),
 ]
+
 
 
 def load_profile_node(state: GraphState) -> Dict[str, Any]:
@@ -57,11 +63,11 @@ async def _fetch_jobs_async(
     tool_fn: Any,
     role: str,
     loc: str,
-    timeout_seconds: float = 12.0,
-    max_attempts: int = 2,
-    delay_seconds: float = 1.0,
+    timeout_seconds: float = 8.0,
+    max_attempts: int = 1,
+    delay_seconds: float = 0.5,
 ) -> List[Dict[str, Any]]:
-    """Fetch jobs from an MCP tool asynchronously with retry (up to max_attempts) & error logging."""
+    """Fetch jobs from an MCP tool asynchronously with timeout & error logging."""
     for attempt in range(1, max_attempts + 1):
         try:
             res = await asyncio.wait_for(
@@ -71,36 +77,20 @@ async def _fetch_jobs_async(
             if isinstance(res, list):
                 valid_jobs = []
                 for j in res:
-                    if isinstance(j, dict):
-                        if j.get("error"):
-                            logger.warning(
-                                f"Source '{tool_name}' reported error on attempt {attempt}/{max_attempts}: {j['error']}"
-                            )
-                        elif j.get("title"):
-                            valid_jobs.append(j)
-                if valid_jobs:
-                    return valid_jobs
-                # If source returned empty/error on attempt < max_attempts, retry after short delay
-                if attempt < max_attempts:
-                    logger.info(
-                        f"Source '{tool_name}' returned 0 valid jobs on attempt {attempt}/{max_attempts}. Retrying in {delay_seconds}s..."
-                    )
-                    await asyncio.sleep(delay_seconds)
-                else:
-                    return valid_jobs
+                    if isinstance(j, dict) and j.get("title"):
+                        valid_jobs.append(j)
+                return valid_jobs
             return []
         except asyncio.TimeoutError:
             logger.warning(
-                f"Source '{tool_name}' timed out after {timeout_seconds}s on attempt {attempt}/{max_attempts} for query '{role}'."
+                f"Source '{tool_name}' timed out after {timeout_seconds}s for query '{role}'."
             )
-            if attempt < max_attempts:
-                await asyncio.sleep(delay_seconds)
         except Exception as e:
             logger.warning(
-                f"Source '{tool_name}' failed with error on attempt {attempt}/{max_attempts}: {str(e)}."
+                f"Source '{tool_name}' failed with error: {str(e)}."
             )
-            if attempt < max_attempts:
-                await asyncio.sleep(delay_seconds)
+
+    return []
 
     logger.warning(
         f"Source '{tool_name}' failed after {max_attempts} attempts. Marking as failed for this run."
@@ -123,6 +113,9 @@ def search_sources_node(state: GraphState) -> Dict[str, Any]:
         profile.locations if profile and profile.locations else ["Remote"]
     )
 
+    search_roles = roles[:2] if len(roles) > 2 else roles
+    search_locations = locations[:1] if len(locations) > 1 else locations
+
     enabled_sources = settings.JOB_SOURCES
     active_tools = [
         (name, fn) for name, fn in SEARCH_TOOLS if name in enabled_sources
@@ -130,8 +123,8 @@ def search_sources_node(state: GraphState) -> Dict[str, Any]:
 
     async def _run_all_searches():
         tasks = []
-        for r in roles:
-            for l in locations:
+        for r in search_roles:
+            for l in search_locations:
                 for name, fn in active_tools:
                     tasks.append(_fetch_jobs_async(name, fn, r, l))
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -209,8 +202,20 @@ def match_score_node(state: GraphState) -> Dict[str, Any]:
     resume_summary = state.get("resume_summary") or "Candidate Resume"
     profile = state.get("profile")
 
+    # If there are many filtered postings, pre-rank by vector similarity to evaluate top 10 candidates
+    target_eval_count = min(len(filtered_postings), 10)
+    if len(filtered_postings) > target_eval_count:
+        logger.info(
+            f"Pre-ranking {len(filtered_postings)} postings by vector similarity to select top {target_eval_count} candidates for LLM evaluation."
+        )
+        postings_to_eval = rank_jobs_by_resume_similarity(
+            resume_text=resume_summary, jobs=filtered_postings, top_k=target_eval_count
+        )
+    else:
+        postings_to_eval = filtered_postings
+
     scored_postings = []
-    for job in filtered_postings:
+    for job in postings_to_eval:
         job_desc = (
             f"Title: {job.get('title', '')}\n"
             f"Company: {job.get('company', '')}\n"
@@ -232,22 +237,11 @@ def match_score_node(state: GraphState) -> Dict[str, Any]:
             rec_val = str(eval_dict.get("recommendation", "")).replace(
                 "RecommendationEnum.", ""
             )
-            cover_letter = ""
-            if rec_val.lower() == "apply":
-                logger.info(
-                    f"Job '{job.get('title')}' recommended for APPLY. Generating cover letter draft via Groq..."
-                )
-                cover_letter = generate_cover_letter_draft(
-                    resume_summary=resume_summary,
-                    job_title=job.get("title", ""),
-                    company_name=job.get("company", ""),
-                    job_description=job_desc,
-                )
-
-            eval_dict["cover_letter_draft"] = cover_letter
+            eval_dict["recommendation"] = rec_val
+            eval_dict["cover_letter_draft"] = ""
             job_copy = dict(job)
             job_copy["evaluation"] = eval_dict
-            job_copy["cover_letter_draft"] = cover_letter
+            job_copy["cover_letter_draft"] = ""
             scored_postings.append(job_copy)
         except Exception as e:
             logger.warning(f"Evaluation error for job '{job.get('title')}': {e}")
@@ -261,6 +255,27 @@ def match_score_node(state: GraphState) -> Dict[str, Any]:
                 "one_line_reasoning": f"Evaluation error: {str(e)}",
             }
             scored_postings.append(job_copy)
+
+    # Generate cover letter drafts for top 3 APPLY postings to respect Groq rate limits
+    apply_count = 0
+    for job_item in sorted(scored_postings, key=lambda x: x.get("evaluation", {}).get("match_score", 0), reverse=True):
+        rec_str = str(job_item.get("evaluation", {}).get("recommendation", "")).lower()
+        if rec_str == "apply" and apply_count < 3:
+            apply_count += 1
+            logger.info(
+                f"Job '{job_item.get('title')}' recommended for APPLY (#{apply_count}). Generating cover letter draft..."
+            )
+            try:
+                cl_draft = generate_cover_letter_draft(
+                    resume_summary=resume_summary,
+                    job_title=job_item.get("title", ""),
+                    company_name=job_item.get("company", ""),
+                    job_description=job_item.get("description", ""),
+                )
+                job_item["evaluation"]["cover_letter_draft"] = cl_draft
+                job_item["cover_letter_draft"] = cl_draft
+            except Exception as cl_err:
+                logger.warning(f"Cover letter generation skipped for '{job_item.get('title')}': {cl_err}")
 
     return {"scored_postings": scored_postings}
 
@@ -279,6 +294,13 @@ def rank_node(state: GraphState) -> Dict[str, Any]:
         if j.get("evaluation", {}).get("match_score", 0) >= cutoff
     ]
 
+    # Fallback to all scored postings sorted by match score if cutoff filtered out all jobs
+    if not passing_jobs and scored_postings:
+        logger.info(
+            f"No jobs met or exceeded match score cutoff ({cutoff}%). Falling back to top scored postings."
+        )
+        passing_jobs = list(scored_postings)
+
     # Rank by vector similarity if resume summary exists
     ranked_jobs = rank_jobs_by_resume_similarity(
         resume_text=resume_summary, jobs=passing_jobs, top_k=len(passing_jobs)
@@ -296,8 +318,13 @@ def rank_node(state: GraphState) -> Dict[str, Any]:
 def present_node(state: GraphState) -> Dict[str, Any]:
     """Node 7: Present final shortlist, save to SQLite with run_id and timestamp."""
     shortlist = state.get("shortlist") or []
+    scored_postings = state.get("scored_postings") or []
     profile = state.get("profile")
     user_name = profile.name if profile else "User"
+
+    # Save evaluated jobs to evaluated_jobs table
+    if scored_postings:
+        save_evaluated_jobs(scored_postings)
 
     run_id = save_shortlist_to_db(
         shortlist_jobs=shortlist, user_name=user_name, run_id=state.get("run_id")

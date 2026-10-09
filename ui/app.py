@@ -10,7 +10,6 @@ if str(ROOT_DIR) not in sys.path:
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 
 from storage.profile_storage import (
     load_profile_from_json,
@@ -19,7 +18,6 @@ from storage.profile_storage import (
 )
 from storage.job_storage import (
     load_shortlist_from_db,
-    update_shortlist_job_status,
     update_job_full_status,
     get_application_analytics,
     get_recommended_profile_skills,
@@ -40,7 +38,6 @@ importlib.reload(kanban_module)
 
 from ui.components.kpi_card import render_kpi_card
 from ui.components.job_card import render_job_card
-from ui.components.kanban import render_kanban_board
 
 # Set Streamlit Page Configuration
 st.set_page_config(
@@ -75,7 +72,7 @@ hdr_col1, hdr_col2, hdr_col3 = st.columns([2.4, 1.3, 1.3], vertical_alignment="c
 
 with hdr_col1:
     st.markdown(
-        f"""<div class="brand-wrapper">
+        """<div class="brand-wrapper">
 <div class="brand-logo-icon">💼</div>
 <div>
 <h1 class="brand-title-text">AI Job Finder</h1>
@@ -143,19 +140,26 @@ with tab1:
     # Load All Jobs for KPI Summary
     all_shortlist_jobs = load_shortlist_from_db()
     total_jobs_cnt = len(all_shortlist_jobs)
-    top_matches_cnt = sum(1 for j in all_shortlist_jobs if j.get("evaluation", {}).get("match_score", 0) >= 80)
+    top_matches_cnt = sum(1 for j in all_shortlist_jobs if j.get("evaluation", {}).get("match_score", 0) >= 60)
     applied_cnt = sum(1 for j in all_shortlist_jobs if j.get("is_applied"))
     
+    last_run_str = "Just Now" if all_shortlist_jobs else "N/A"
+    if all_shortlist_jobs and all_shortlist_jobs[0].get("created_at"):
+        try:
+            last_run_str = str(all_shortlist_jobs[0].get("created_at"))[:16]
+        except Exception:
+            pass
+
     # 4 KPI Stat Cards with Top Accent Colors & Real Time
     kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
     with kpi_col1:
         render_kpi_card("Total Jobs", str(total_jobs_cnt), "Fetched across active portals", icon="💼", accent_color="#6366F1")
     with kpi_col2:
-        render_kpi_card("Top Matches", str(top_matches_cnt), "≥80% match rating", icon="🔥", accent_color="#10B981")
+        render_kpi_card("Top Matches", str(top_matches_cnt), "≥60% match rating", icon="🔥", accent_color="#10B981")
     with kpi_col3:
         render_kpi_card("Applications", str(applied_cnt), "Submitted or tracked", icon="✅", accent_color="#F59E0B")
     with kpi_col4:
-        render_kpi_card("Last Run", "Today 07:30", "Pipeline auto-synced", icon="⏱️", accent_color="#06B6D4")
+        render_kpi_card("Last Run", last_run_str, "Pipeline auto-synced", icon="⏱️", accent_color="#06B6D4")
 
     st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
@@ -182,7 +186,7 @@ with tab1:
     with ctrl3:
         portal_filter = st.selectbox(
             "Filter Portal",
-            options=["All Portals", "RemoteOK", "WeWorkRemotely", "LinkedIn", "Indeed", "Naukri"],
+            options=["All Portals", "RemoteOK", "WeWorkRemotely", "Jobicy", "Arbeitnow", "Remotive", "LinkedIn", "Indeed", "Naukri"],
             index=0,
             label_visibility="collapsed",
             key="shortlist_portal_filter",
@@ -451,11 +455,11 @@ with tab3:
         st.caption(f"Showing **{len(filtered_apps)}** application(s)")
         st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
 
-        for job in filtered_apps:
+        for idx, job in enumerate(filtered_apps):
             eval_data = job.get("evaluation", {})
             match_score = eval_data.get("match_score", 0)
             rec_raw = str(eval_data.get("recommendation", "Consider")).replace("RecommendationEnum.", "").strip().upper()
-            job_id = job.get("id")
+            job_id = job.get("id") or idx
             curr_st = job.get("status", "new").lower()
             cover_letter = job.get("cover_letter_draft") or eval_data.get("cover_letter_draft", "")
             apply_url = job.get("apply_url", "#")
@@ -478,7 +482,7 @@ with tab3:
                 "Status",
                 options=valid_opts,
                 index=init_idx,
-                key=f"lst_st_sel_{job_id}",
+                key=f"lst_st_sel_{job_id}_{idx}",
                 label_visibility="collapsed",
             )
             if new_val != curr_st:
@@ -490,8 +494,14 @@ with tab3:
 
             if cover_letter:
                 with st.expander(f"Cover Letter Draft — {job.get('title')} at {job.get('company')}"):
-                    st.text_area("Draft Content", value=cover_letter, height=180, key=f"cov_lst_{job_id}", label_visibility="collapsed")
-                    st.download_button("📥 Download Cover Letter", data=cover_letter, file_name=f"cover_letter_{job.get('company')}.txt", mime="text/plain")
+                    st.text_area("Draft Content", value=cover_letter, height=180, key=f"cov_lst_{job_id}_{idx}", label_visibility="collapsed")
+                    st.download_button(
+                        "📥 Download Cover Letter",
+                        data=cover_letter,
+                        file_name=f"cover_letter_{job.get('company')}.txt",
+                        mime="text/plain",
+                        key=f"dl_cov_{job_id}_{idx}",
+                    )
             st.markdown("<div style='margin-bottom: 0.75rem;'></div>", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
@@ -630,7 +640,7 @@ with tab5:
     st.caption("Configure matching thresholds, active portal scrapers, and monitor MCP server connectivity.")
 
     curr_cfg = load_pipeline_config()
-    all_sources = ["RemoteOK", "WeWorkRemotely", "LinkedIn", "Indeed", "Naukri"]
+    all_sources = ["RemoteOK", "WeWorkRemotely", "Jobicy", "Arbeitnow", "Remotive", "LinkedIn", "Indeed", "Naukri"]
 
     st.markdown("<div class='card-wrapper'>", unsafe_allow_html=True)
     with st.form("pipeline_config_form"):
@@ -639,7 +649,7 @@ with tab5:
             "Match Score Threshold (%)",
             min_value=0,
             max_value=100,
-            value=int(curr_cfg.get("match_score_cutoff", 60)),
+            value=int(curr_cfg.get("match_score_cutoff", 50)),
             step=5,
             help="Jobs below this percentage will be excluded from the shortlist",
         )
@@ -649,15 +659,16 @@ with tab5:
             "Target Shortlist Size",
             min_value=1,
             max_value=100,
-            value=int(curr_cfg.get("shortlist_size", 15)),
+            value=int(curr_cfg.get("shortlist_size", 20)),
             step=1,
         )
 
         st.markdown("### 🌐 2. Active Job Search Sources")
+        saved_sources = [s for s in curr_cfg.get("job_sources", all_sources) if s in all_sources]
         selected_sources = st.multiselect(
             "Select Search Portals to Query",
             options=all_sources,
-            default=curr_cfg.get("job_sources", all_sources),
+            default=saved_sources if saved_sources else all_sources,
         )
 
         cfg_submitted = st.form_submit_button("⚙️ Save Pipeline Settings", type="primary", use_container_width=True)
@@ -676,6 +687,11 @@ with tab5:
     st.markdown("### 🔌 3. MCP Server Health & Tool Latency")
     if st.button("🔌 Run Health Check"):
         with st.spinner("Pinging registered MCP search tools..."):
+            import importlib
+            import mcp_servers.server as mcp_server_mod
+            import mcp_servers.health as mcp_health_mod
+            importlib.reload(mcp_server_mod)
+            importlib.reload(mcp_health_mod)
             from mcp_servers.health import ping_mcp_tools
             start_t = datetime.now()
             ping_results = ping_mcp_tools(timeout_per_tool=5.0)

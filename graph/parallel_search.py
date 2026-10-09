@@ -1,6 +1,6 @@
 import asyncio
 from typing import List, Dict, Any
-from storage.profile_storage import load_profile_from_json, load_profile_from_db
+from storage.profile_storage import load_profile_from_json
 from profile.user_profile import UserProfile
 from mcp_servers.server import (
     search_linkedin,
@@ -43,7 +43,7 @@ async def fetch_jobs_from_tool_async(
                 else:
                     return valid_jobs
             return []
-        except Exception as e:
+        except Exception:
             if attempt < max_attempts:
                 await asyncio.sleep(delay_seconds)
     return []

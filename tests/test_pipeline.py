@@ -1,4 +1,3 @@
-import pytest
 from profile.user_profile import UserProfile
 from graph.deduplicator import deduplicate_job_postings
 from graph.filters import filter_job_postings
@@ -183,7 +182,7 @@ def test_resume_parser_docx_and_pdf():
     """Test extracting raw resume text from DOCX using python-docx and pdfplumber parser routing."""
     import io
     import docx
-    from profile.resume_parser import extract_text_from_resume, extract_text_from_docx
+    from profile.resume_parser import extract_text_from_resume
 
     # Create synthetic DOCX file stream
     doc = docx.Document()

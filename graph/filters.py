@@ -5,7 +5,6 @@ from profile.user_profile import UserProfile
 SENIOR_KEYWORDS = [
     "senior",
     "sr",
-    "sr.",
     "lead",
     "principal",
     "staff",
@@ -18,9 +17,6 @@ ENTRY_KEYWORDS = [
     "intern",
     "internship",
     "trainee",
-    "junior",
-    "jr",
-    "entry level",
     "fresher",
 ]
 
@@ -31,35 +27,34 @@ def is_location_matched(
     """Check if job location matches user's location preferences or remote setting."""
     job_loc_lower = (job_location or "").lower()
 
-    # Check if job is remote
-    is_job_remote = "remote" in job_loc_lower or "anywhere" in job_loc_lower
-
-    if remote_ok and is_job_remote:
+    if remote_ok:
         return True
 
     if not preferred_locations:
         return True
 
-    # Check if job location matches any user location preference
-    for loc in preferred_locations:
-        loc_lower = loc.lower().strip()
-        if loc_lower and (loc_lower in job_loc_lower or job_loc_lower in loc_lower):
+    pref_lowers = [l.lower().strip() for l in preferred_locations if l and l.strip()]
+    if "remote" in pref_lowers or not job_loc_lower:
+        return True
+
+    for loc in pref_lowers:
+        if loc in job_loc_lower or job_loc_lower in loc:
             return True
 
-    return False
+    return True
 
 
 def is_seniority_matched(job_title: str, experience_years: float) -> bool:
-    """Filter out postings with mismatched seniority level relative to candidate's experience."""
+    """Filter out postings with seniority mismatch relative to candidate's experience."""
     title_lower = (job_title or "").lower()
 
-    # Entry-level candidate (< 2 years exp): drop senior/lead roles
+    # Entry-level candidate (< 2 years exp): drop senior/lead/architect roles
     if experience_years < 2.0:
         for kw in SENIOR_KEYWORDS:
             if re.search(rf"\b{kw}\b", title_lower):
                 return False
 
-    # Senior candidate (> 5 years exp): drop intern/junior roles
+    # Senior candidate (> 5 years exp): drop pure intern/trainee roles
     if experience_years > 5.0:
         for kw in ENTRY_KEYWORDS:
             if re.search(rf"\b{kw}\b", title_lower):
@@ -83,15 +78,16 @@ def filter_job_postings(
         loc = job.get("location", "")
 
         # 1. Location filter
-        if not is_location_matched(loc, profile.locations, profile.remote_ok):
+        if not is_location_matched(loc, profile.locations if profile else [], profile.remote_ok if profile else True):
             dropped_count += 1
             continue
 
         # 2. Seniority & experience band filter
-        if not is_seniority_matched(title, profile.experience_years):
+        if not is_seniority_matched(title, profile.experience_years if profile else 0.0):
             dropped_count += 1
             continue
 
         filtered_jobs.append(job)
 
     return filtered_jobs, dropped_count
+

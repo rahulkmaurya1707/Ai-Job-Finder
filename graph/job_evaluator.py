@@ -62,6 +62,7 @@ def evaluate_job_match(
     structured_llm = llm.with_structured_output(JobMatchEvaluation)
     chain = prompt | structured_llm
 
+    truncated_desc = job_description[:1200] if job_description else ""
     return chain.invoke(
-        {"resume_summary": resume_summary, "job_description": job_description}
+        {"resume_summary": resume_summary, "job_description": truncated_desc}
     )

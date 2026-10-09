@@ -1,5 +1,10 @@
 from graph.workflow import app_graph
-from storage.profile_storage import load_profile_from_json
+from profile.user_profile import UserProfile
+from storage.profile_storage import (
+    load_profile_from_json,
+    save_profile_to_json,
+    save_profile_to_db,
+)
 from storage.vector_store import store_resume_vector
 from mcp_servers.health import ping_mcp_tools
 from config import setup_logging, get_logger
@@ -34,10 +39,13 @@ def main():
     logger.info(f"Skills: {profile.skills}")
 
     # Seed vector store with profile summary
-    resume_summary = (
-        f"{profile.name} - Senior Software & AI Engineer. "
-        f"Expertise in {', '.join(profile.skills)}. {profile.experience_years} years experience."
-    )
+    if getattr(profile, "raw_resume_text", None) and profile.raw_resume_text.strip():
+        resume_summary = profile.raw_resume_text.strip()
+    else:
+        resume_summary = (
+            f"{profile.name} - Senior Software & AI Engineer. "
+            f"Expertise in {', '.join(profile.skills)}. {profile.experience_years} years experience."
+        )
     store_resume_vector(user_name=profile.name, resume_text=resume_summary)
 
     initial_state = {
@@ -82,6 +90,7 @@ def main():
         logger.info(divider)
 
     logger.info("[OK] Pipeline execution finished successfully.")
+    return final_state
 
 
 if __name__ == "__main__":

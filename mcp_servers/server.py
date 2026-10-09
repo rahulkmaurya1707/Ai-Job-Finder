@@ -5,6 +5,9 @@ from mcp_servers.portal_tools import (
     search_indeed_jobs,
     search_remoteok_jobs,
     search_weworkremotely_jobs,
+    search_jobicy_jobs,
+    search_arbeitnow_jobs,
+    search_remotive_jobs,
 )
 from storage.vector_store import (
     get_resume_embedding_by_user,
@@ -47,9 +50,35 @@ def search_weworkremotely(query: str, location: str = "") -> list:
 
 
 @mcp.tool()
-def get_profile_resume_embedding(user_name: str) -> dict:
+def search_jobicy(query: str, location: str = "") -> list:
+    """Search for remote tech jobs on Jobicy."""
+    return search_jobicy_jobs(query, location)
+
+
+@mcp.tool()
+def search_arbeitnow(query: str, location: str = "") -> list:
+    """Search for tech jobs on Arbeitnow."""
+    return search_arbeitnow_jobs(query, location)
+
+
+@mcp.tool()
+def search_remotive(query: str, location: str = "") -> list:
+    """Search for remote jobs on Remotive."""
+    return search_remotive_jobs(query, location)
+
+
+
+@mcp.tool()
+def get_profile_resume_embedding(user_name: str = "Candidate") -> dict:
     """Query Chroma vector store for the current profile's resume embedding."""
     return get_resume_embedding_by_user(user_name)
+
+
+@mcp.tool()
+def search_resume_embeddings(query_text: str = "ping", n_results: int = 3) -> dict:
+    """Query Chroma vector store for matching resume chunks."""
+    results = search_resume_vector_store(query_text=query_text or "ping", n_results=n_results)
+    return {"results": results}
 
 
 @mcp.tool()
@@ -63,4 +92,11 @@ def send_notification_tool(
 
 
 if __name__ == "__main__":
-    mcp.run()
+    import os
+
+    port = int(os.environ.get("PORT", "10000"))
+    mcp.run(
+        transport="streamable-http",
+        host="0.0.0.0",
+        port=port,
+    )

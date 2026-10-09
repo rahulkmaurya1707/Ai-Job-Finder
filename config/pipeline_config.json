@@ -1,9 +1,12 @@
 {
-  "match_score_cutoff": 60,
-  "shortlist_size": 28,
+  "match_score_cutoff": 50,
+  "shortlist_size": 25,
   "job_sources": [
     "RemoteOK",
     "WeWorkRemotely",
+    "Jobicy",
+    "Arbeitnow",
+    "Remotive",
     "LinkedIn",
     "Indeed",
     "Naukri"

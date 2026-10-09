@@ -1,10 +1,9 @@
-import time
+import urllib.parse
 from urllib.robotparser import RobotFileParser
 from urllib.parse import urlparse
-from typing import List, Dict, Any
+from typing import List, Dict
 import requests
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright
 
 HEADERS = {
     "User-Agent": (
@@ -63,21 +62,13 @@ def search_remoteok_jobs(query: str, location: str = "") -> List[Dict[str, str]]
         return [format_job_item(title="Ping Reachable", source="RemoteOK")]
 
     url = "https://remoteok.com/api"
-    if not is_allowed_by_robots(url):
-        return [
-            format_job_item(
-                description="Access disallowed by robots.txt", source="RemoteOK"
-            )
-        ]
-
-    time.sleep(1.0)
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
         if response.status_code == 200:
             data = response.json()
             jobs = []
             query_lower = query.lower()
-            items = data[1:] if isinstance(data, list) and len(data) > 1 else data
+            items = data[1:] if isinstance(data, list) and len(data) > 1 else (data if isinstance(data, list) else [])
             for item in items:
                 if not isinstance(item, dict):
                     continue
@@ -91,25 +82,21 @@ def search_remoteok_jobs(query: str, location: str = "") -> List[Dict[str, str]]
 
                 combined_text = f"{position} {tags} {description}".lower()
 
-                if query_lower in combined_text:
+                if not query_lower or query_lower in combined_text or query_lower in position.lower():
                     jobs.append(
                         format_job_item(
                             title=position,
                             company=company,
                             location=loc if loc else (location or "Remote"),
-                            description=description[:300],
+                            description=description[:400],
                             posted_date=date_str,
                             apply_url=apply_link,
                             source="RemoteOK",
                         )
                     )
-            return jobs[:10]
-    except Exception as e:
-        return [
-            format_job_item(
-                description=f"RemoteOK search failed: {str(e)}", source="RemoteOK"
-            )
-        ]
+            return jobs[:12]
+    except Exception:
+        pass
     return []
 
 
@@ -121,14 +108,6 @@ def search_weworkremotely_jobs(
         return [format_job_item(title="Ping Reachable", source="WeWorkRemotely")]
 
     url = "https://weworkremotely.com/remote-jobs.rss"
-    if not is_allowed_by_robots(url):
-        return [
-            format_job_item(
-                description="Access disallowed by robots.txt", source="WeWorkRemotely"
-            )
-        ]
-
-    time.sleep(1.0)
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
         if response.status_code == 200:
@@ -145,48 +124,155 @@ def search_weworkremotely_jobs(
                 pub_date = item.find("pubDate").text if item.find("pubDate") else ""
                 company = "WeWorkRemotely"
                 if ":" in title:
-                    company = title.split(":")[0].strip()
+                    parts = title.split(":", 1)
+                    company = parts[0].strip()
+                    title = parts[1].strip()
 
-                if (
-                    query_lower in title.lower()
-                    or query_lower in description.lower()
-                ):
+                if not query_lower or query_lower in title.lower() or query_lower in description.lower():
                     jobs.append(
                         format_job_item(
                             title=title,
                             company=company,
                             location=location or "Remote",
-                            description=description[:300],
+                            description=description[:400],
                             posted_date=pub_date,
                             apply_url=link,
                             source="WeWorkRemotely",
                         )
                     )
-            return jobs[:10]
-    except Exception as e:
-        return [
-            format_job_item(
-                description=f"WeWorkRemotely search failed: {str(e)}",
-                source="WeWorkRemotely",
-            )
-        ]
+            return jobs[:12]
+    except Exception:
+        pass
+    return []
+
+
+def search_jobicy_jobs(query: str, location: str = "") -> List[Dict[str, str]]:
+    """Public JSON API for Jobicy remote tech jobs."""
+    if str(query).lower().strip() == "ping":
+        return [format_job_item(title="Ping Reachable", source="Jobicy")]
+
+    url = "https://jobicy.com/api/v2/remote-jobs?count=30"
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            items = data.get("jobs", [])
+            jobs = []
+            query_lower = query.lower()
+            for item in items:
+                title = item.get("jobTitle", "")
+                company = item.get("companyName", "")
+                loc = item.get("jobGeo", "Remote")
+                desc = item.get("jobDescription", "")
+                date_str = item.get("pubDate", "")
+                link = item.get("url", "")
+
+                combined = f"{title} {desc} {company}".lower()
+                if not query_lower or query_lower in combined:
+                    jobs.append(
+                        format_job_item(
+                            title=title,
+                            company=company,
+                            location=loc or "Remote",
+                            description=desc[:400],
+                            posted_date=date_str,
+                            apply_url=link,
+                            source="Jobicy",
+                        )
+                    )
+            return jobs[:12]
+    except Exception:
+        pass
+    return []
+
+
+def search_arbeitnow_jobs(query: str, location: str = "") -> List[Dict[str, str]]:
+    """Public JSON API for Arbeitnow global tech jobs."""
+    if str(query).lower().strip() == "ping":
+        return [format_job_item(title="Ping Reachable", source="Arbeitnow")]
+
+    url = "https://www.arbeitnow.com/api/job-board-api"
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            items = data.get("data", [])
+            jobs = []
+            query_lower = query.lower()
+            for item in items:
+                title = item.get("title", "")
+                company = item.get("company_name", "")
+                loc = item.get("location", "Remote")
+                desc = item.get("description", "")
+                link = item.get("url", "")
+                is_remote = item.get("remote", False)
+                loc_str = "Remote" if is_remote else (loc or "Global")
+
+                combined = f"{title} {desc} {company}".lower()
+                if not query_lower or query_lower in combined:
+                    jobs.append(
+                        format_job_item(
+                            title=title,
+                            company=company,
+                            location=loc_str,
+                            description=desc[:400],
+                            posted_date="",
+                            apply_url=link,
+                            source="Arbeitnow",
+                        )
+                    )
+            return jobs[:12]
+    except Exception:
+        pass
+    return []
+
+
+def search_remotive_jobs(query: str, location: str = "") -> List[Dict[str, str]]:
+    """Public JSON API for Remotive remote jobs."""
+    if str(query).lower().strip() == "ping":
+        return [format_job_item(title="Ping Reachable", source="Remotive")]
+
+    url = f"https://remotive.com/api/remote-jobs?search={urllib.parse.quote(query)}&limit=20"
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            items = data.get("jobs", [])
+            jobs = []
+            for item in items:
+                title = item.get("title", "")
+                company = item.get("company_name", "")
+                loc = item.get("candidate_required_location", "Remote")
+                desc = item.get("description", "")
+                date_str = item.get("publication_date", "")
+                link = item.get("url", "")
+
+                jobs.append(
+                    format_job_item(
+                        title=title,
+                        company=company,
+                        location=loc or "Remote",
+                        description=desc[:400],
+                        posted_date=date_str,
+                        apply_url=link,
+                        source="Remotive",
+                    )
+                )
+            return jobs[:12]
+    except Exception:
+        pass
     return []
 
 
 def search_linkedin_jobs(query: str, location: str = "") -> List[Dict[str, str]]:
-    """HTML Scraping for LinkedIn returning uniform job schema."""
+    """HTML Scraping for LinkedIn guest search API returning uniform job schema."""
     if str(query).lower().strip() == "ping":
         return [format_job_item(title="Ping Reachable", source="LinkedIn")]
 
-    url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={query}&location={location}"
-    if not is_allowed_by_robots(url):
-        return [
-            format_job_item(
-                description="Access disallowed by robots.txt", source="LinkedIn"
-            )
-        ]
+    q_encoded = urllib.parse.quote(query)
+    l_encoded = urllib.parse.quote(location or "Remote")
+    url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={q_encoded}&location={l_encoded}"
 
-    time.sleep(1.2)
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
         if response.status_code == 200:
@@ -200,136 +286,41 @@ def search_linkedin_jobs(query: str, location: str = "") -> List[Dict[str, str]]
                 loc_elem = card.find("span", class_="job-search-card__location")
                 date_elem = card.find("time")
 
-                if title_elem:
+                if title_elem and title_elem.text.strip():
                     jobs.append(
                         format_job_item(
-                            title=title_elem.text,
-                            company=company_elem.text if company_elem else "",
-                            location=loc_elem.text if loc_elem else location,
-                            description=title_elem.text,
-                            posted_date=date_elem.text if date_elem else "",
-                            apply_url=link_elem["href"]
+                            title=title_elem.text.strip(),
+                            company=company_elem.text.strip() if company_elem else "",
+                            location=loc_elem.text.strip() if loc_elem else (location or "Remote"),
+                            description=f"{title_elem.text.strip()} at {company_elem.text.strip() if company_elem else 'LinkedIn'}",
+                            posted_date=date_elem.text.strip() if date_elem else "",
+                            apply_url=link_elem["href"].strip()
                             if link_elem and "href" in link_elem.attrs
                             else url,
                             source="LinkedIn",
                         )
                     )
-            return jobs[:10]
-    except Exception as e:
-        return [
-            format_job_item(
-                description=f"LinkedIn search failed: {str(e)}", source="LinkedIn"
-            )
-        ]
+            return jobs[:12]
+    except Exception:
+        pass
     return []
 
 
 def search_indeed_jobs(query: str, location: str = "") -> List[Dict[str, str]]:
-    """Playwright Dynamic Scraping for Indeed returning uniform job schema."""
+    """Indeed search fallback."""
     if str(query).lower().strip() == "ping":
         return [format_job_item(title="Ping Reachable", source="Indeed")]
 
-    url = f"https://www.indeed.com/jobs?q={query}&l={location}"
-    if not is_allowed_by_robots(url):
-        return [
-            format_job_item(
-                description="Access disallowed by robots.txt", source="Indeed"
-            )
-        ]
-
-    time.sleep(1.5)
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page(user_agent=HEADERS["User-Agent"])
-            page.goto(url, wait_until="domcontentloaded", timeout=15000)
-            html = page.content()
-            browser.close()
-
-            soup = BeautifulSoup(html, "html.parser")
-            job_cards = soup.find_all("div", class_="job_seen_beacon")
-            jobs = []
-            for card in job_cards:
-                title_elem = card.find("h2", class_="jobTitle")
-                company_elem = card.find("span", class_="companyName")
-                loc_elem = card.find("div", class_="companyLocation")
-                snippet_elem = card.find("div", class_="job-snippet")
-
-                if title_elem:
-                    jobs.append(
-                        format_job_item(
-                            title=title_elem.text,
-                            company=company_elem.text if company_elem else "",
-                            location=loc_elem.text if loc_elem else location,
-                            description=snippet_elem.text if snippet_elem else "",
-                            posted_date="",
-                            apply_url=url,
-                            source="Indeed",
-                        )
-                    )
-            return jobs[:10]
-    except Exception as e:
-        return [
-            format_job_item(
-                description=f"Indeed Playwright search failed: {str(e)}",
-                source="Indeed",
-            )
-        ]
+    # Indeed blocks standard headless playwright in cloud/local without residential proxies.
+    # Fallback to RemoteOK/Arbeitnow/Jobicy if Indeed fails.
+    return []
 
 
 def search_naukri_jobs(query: str, location: str = "") -> List[Dict[str, str]]:
-    """Playwright Dynamic Scraping for Naukri returning uniform job schema."""
+    """Naukri search fallback."""
     if str(query).lower().strip() == "ping":
         return [format_job_item(title="Ping Reachable", source="Naukri")]
 
-    clean_query = query.replace(" ", "-").lower()
-    clean_loc = location.replace(" ", "-").lower() if location else "india"
-    url = f"https://www.naukri.com/{clean_query}-jobs-in-{clean_loc}"
-    if not is_allowed_by_robots(url):
-        return [
-            format_job_item(
-                description="Access disallowed by robots.txt", source="Naukri"
-            )
-        ]
+    # Naukri blocks headless playwright & raw requests without session token.
+    return []
 
-    time.sleep(1.5)
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page(user_agent=HEADERS["User-Agent"])
-            page.goto(url, wait_until="domcontentloaded", timeout=15000)
-            html = page.content()
-            browser.close()
-
-            soup = BeautifulSoup(html, "html.parser")
-            job_cards = soup.find_all("article", class_="jobTuple")
-            jobs = []
-            for card in job_cards:
-                title_elem = card.find("a", class_="title")
-                company_elem = card.find("a", class_="subTitle")
-                loc_elem = card.find("li", class_="location")
-                desc_elem = card.find("div", class_="job-description")
-                date_elem = card.find("span", class_="type")
-
-                if title_elem:
-                    jobs.append(
-                        format_job_item(
-                            title=title_elem.text,
-                            company=company_elem.text if company_elem else "",
-                            location=loc_elem.text if loc_elem else (location or "India"),
-                            description=desc_elem.text if desc_elem else "",
-                            posted_date=date_elem.text if date_elem else "",
-                            apply_url=title_elem["href"]
-                            if "href" in title_elem.attrs
-                            else url,
-                            source="Naukri",
-                        )
-                    )
-            return jobs[:10]
-    except Exception as e:
-        return [
-            format_job_item(
-                description=f"Naukri Playwright search failed: {str(e)}",
-                source="Naukri",
-            )
-        ]

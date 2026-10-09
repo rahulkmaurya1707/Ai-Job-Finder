@@ -1,11 +1,35 @@
 {
-  "name": "",
-  "skills": [],
-  "preferred_roles": [],
-  "experience_years": 0.0,
-  "min_salary": 0.0,
-  "max_salary": 0.0,
-  "locations": [],
+  "name": "Rahul Kumar Maurya",
+  "skills": [
+    "Java",
+    "Python",
+    "JavaScript",
+    "HTML",
+    "CSS",
+    "React.js",
+    "Tailwind CSS",
+    "Redux Toolkit",
+    "Node.js",
+    "Express.js",
+    "MongoDB",
+    "Git",
+    "GitHub",
+    "VS Code"
+  ],
+  "preferred_roles": [
+    "Full-stack Developer",
+    "MERN Stack Developer",
+    "Web Developer"
+  ],
+  "experience_years": 0.2,
+  "min_salary": null,
+  "max_salary": null,
+  "locations": [
+    "Varanasi",
+    "Uttar Pradesh",
+    "Pratapgarh",
+    "Uttar Pradesh"
+  ],
   "remote_ok": true,
-  "raw_resume_text": ""
+  "raw_resume_text": null
 }

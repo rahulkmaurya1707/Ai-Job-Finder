@@ -111,6 +111,13 @@ def render_job_card(job: dict, idx: int):
                 st.markdown("---")
                 st.markdown("**Cover Letter Draft:**")
                 st.text_area("Cover Letter", value=cover_letter, height=180, key=f"cov_area_{job_id}_{idx}", label_visibility="collapsed")
+                st.download_button(
+                    "📥 Download Cover Letter",
+                    data=cover_letter,
+                    file_name=f"cover_letter_{company}.txt",
+                    mime="text/plain",
+                    key=f"dl_card_cov_{job_id}_{idx}",
+                )
 
     st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
