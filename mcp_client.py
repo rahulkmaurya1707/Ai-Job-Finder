@@ -39,7 +39,7 @@ def call_remote_tool_sync(
                 async with streamable_http_client(
                     RENDER_URL,
                     http_client=http_client
-                ) as (read_stream, write_stream, _):
+                ) as (read_stream, write_stream):
 
                     async with ClientSession(
                         read_stream,
