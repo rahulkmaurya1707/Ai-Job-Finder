@@ -23,7 +23,7 @@ PING_KWARGS = {
 
 async def _ping_single_tool(
     tool_name: str,
-    timeout_seconds: float = 8.0,
+    timeout_seconds: float = 30.0,
     max_attempts: int = 2,
     delay_seconds: float = 1.0,
 ) -> Dict[str, Any]:
@@ -58,7 +58,8 @@ async def _ping_single_tool(
     }
 
 
-async def ping_mcp_tools_async(timeout_per_tool: float = 8.0) -> Dict[str, Dict[str, Any]]:
+# Updated timeout to 30.0 to accommodate embedding model cold starts
+async def ping_mcp_tools_async(timeout_per_tool: float = 30.0) -> Dict[str, Dict[str, Any]]:
     """Asynchronously ping each registered MCP tool and log any that are unreachable."""
     tools = await mcp.list_tools()
     tasks = [_ping_single_tool(t.name, timeout_seconds=timeout_per_tool) for t in tools]
@@ -95,7 +96,8 @@ async def ping_mcp_tools_async(timeout_per_tool: float = 8.0) -> Dict[str, Dict[
     return status_summary
 
 
-def ping_mcp_tools(timeout_per_tool: float = 8.0) -> Dict[str, Dict[str, Any]]:
+# Updated timeout to 30.0 here as well
+def ping_mcp_tools(timeout_per_tool: float = 30.0) -> Dict[str, Dict[str, Any]]:
     """Synchronous entry point to ping each MCP tool briefly before a full run and log unreachable tools."""
     try:
         loop = asyncio.get_running_loop()
