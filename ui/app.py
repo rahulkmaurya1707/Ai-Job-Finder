@@ -467,7 +467,7 @@ with tab3:
 
             c1, c2, c3, c4, c5 = st.columns([2.5, 2.0, 1.0, 1.2, 1.8])
             c1.markdown(f"**[{job.get('title')}]({apply_url})**")
-            c2.write(f"{job.get('company', 'N/A')} • {job.get('location', 'N/A')}")
+            c2.write(f"{job.get('company', 'N/A')}\n{job.get('location', 'N/A')}")
 
             score_color = "#10B981" if match_score >= 80 else "#F59E0B" if match_score >= 60 else "#F43F5E"
             c3.markdown(f"<span style='color:{score_color}; font-weight:700;'>{match_score}%</span>", unsafe_allow_html=True)
@@ -694,7 +694,8 @@ with tab5:
             importlib.reload(mcp_health_mod)
             from mcp_servers.health import ping_mcp_tools
             start_t = datetime.now()
-            ping_results = ping_mcp_tools(timeout_per_tool=5.0)
+            # UPDATED TIMEOUT HERE TO MATCH BACKEND (30.0s)
+            ping_results = ping_mcp_tools(timeout_per_tool=30.0)
             elapsed_ms = int((datetime.now() - start_t).total_seconds() * 1000)
 
             st.caption(f"Ping check completed in `{elapsed_ms}ms`")
