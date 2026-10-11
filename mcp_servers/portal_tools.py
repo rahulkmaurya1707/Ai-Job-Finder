@@ -82,7 +82,10 @@ def search_remoteok_jobs(query: str, location: str = "") -> List[Dict[str, str]]
 
                 combined_text = f"{position} {tags} {description}".lower()
 
-                if not query_lower or query_lower in combined_text or query_lower in position.lower():
+                query_words = [w.strip() for w in query_lower.split() if len(w.strip()) > 2]
+                match_found = not query_lower or (query_lower in combined_text) or any(w in combined_text for w in query_words)
+
+                if match_found:
                     jobs.append(
                         format_job_item(
                             title=position,
@@ -111,10 +114,14 @@ def search_weworkremotely_jobs(
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
         if response.status_code == 200:
-            soup = BeautifulSoup(response.content, "xml")
+            try:
+                soup = BeautifulSoup(response.content, "xml")
+            except Exception:
+                soup = BeautifulSoup(response.content, "html.parser")
             items = soup.find_all("item")
             jobs = []
             query_lower = query.lower()
+            query_words = [w.strip() for w in query_lower.split() if len(w.strip()) > 2]
             for item in items:
                 title = item.find("title").text if item.find("title") else ""
                 link = item.find("link").text if item.find("link") else ""
@@ -128,7 +135,10 @@ def search_weworkremotely_jobs(
                     company = parts[0].strip()
                     title = parts[1].strip()
 
-                if not query_lower or query_lower in title.lower() or query_lower in description.lower():
+                combined_item = f"{title} {description} {company}".lower()
+                match_found = not query_lower or (query_lower in combined_item) or any(w in combined_item for w in query_words)
+
+                if match_found:
                     jobs.append(
                         format_job_item(
                             title=title,
@@ -159,6 +169,7 @@ def search_jobicy_jobs(query: str, location: str = "") -> List[Dict[str, str]]:
             items = data.get("jobs", [])
             jobs = []
             query_lower = query.lower()
+            query_words = [w.strip() for w in query_lower.split() if len(w.strip()) > 2]
             for item in items:
                 title = item.get("jobTitle", "")
                 company = item.get("companyName", "")
@@ -168,7 +179,8 @@ def search_jobicy_jobs(query: str, location: str = "") -> List[Dict[str, str]]:
                 link = item.get("url", "")
 
                 combined = f"{title} {desc} {company}".lower()
-                if not query_lower or query_lower in combined:
+                match_found = not query_lower or (query_lower in combined) or any(w in combined for w in query_words)
+                if match_found:
                     jobs.append(
                         format_job_item(
                             title=title,
@@ -199,6 +211,7 @@ def search_arbeitnow_jobs(query: str, location: str = "") -> List[Dict[str, str]
             items = data.get("data", [])
             jobs = []
             query_lower = query.lower()
+            query_words = [w.strip() for w in query_lower.split() if len(w.strip()) > 2]
             for item in items:
                 title = item.get("title", "")
                 company = item.get("company_name", "")
@@ -209,7 +222,8 @@ def search_arbeitnow_jobs(query: str, location: str = "") -> List[Dict[str, str]
                 loc_str = "Remote" if is_remote else (loc or "Global")
 
                 combined = f"{title} {desc} {company}".lower()
-                if not query_lower or query_lower in combined:
+                match_found = not query_lower or (query_lower in combined) or any(w in combined for w in query_words)
+                if match_found:
                     jobs.append(
                         format_job_item(
                             title=title,

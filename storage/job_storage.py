@@ -249,6 +249,70 @@ def save_shortlist_to_db(
     return current_run_id
 
 
+SEED_FILE = STORAGE_DIR / "seed_jobs.json"
+
+
+def seed_db_from_json_if_empty(conn: sqlite3.Connection) -> None:
+    """Auto-seed shortlisted_jobs on fresh ephemeral cloud containers like Render."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM shortlisted_jobs")
+    count = cursor.fetchone()[0]
+    if count == 0 and SEED_FILE.exists():
+        try:
+            with open(SEED_FILE, "r", encoding="utf-8") as f:
+                seed_data = json.load(f)
+            seed_run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_initial"
+            for job in seed_data:
+                matching_skills = job.get("matching_skills") or "[]"
+                if isinstance(matching_skills, list):
+                    matching_skills = json.dumps(matching_skills)
+                missing_skills = job.get("missing_skills") or "[]"
+                if isinstance(missing_skills, list):
+                    missing_skills = json.dumps(missing_skills)
+
+                rec = job.get("recommendation", "Consider")
+                if "RecommendationEnum." in str(rec):
+                    rec = str(rec).replace("RecommendationEnum.", "")
+
+                cursor.execute(
+                    """
+                    INSERT INTO shortlisted_jobs (
+                        run_id, user_name, hash_key, title, company, location,
+                        description, posted_date, apply_url, source, vector_similarity_score,
+                        match_score, recommendation, one_line_reasoning, matching_skills, missing_skills,
+                        is_seen, is_applied, status, status_updated_at, cover_letter_draft, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        job.get("run_id") or seed_run_id,
+                        job.get("user_name", "Rahul Kumar Maurya"),
+                        job.get("hash_key", ""),
+                        job.get("title", ""),
+                        job.get("company", ""),
+                        job.get("location", ""),
+                        job.get("description", ""),
+                        job.get("posted_date", ""),
+                        job.get("apply_url", ""),
+                        job.get("source", ""),
+                        job.get("vector_similarity_score", 0.0),
+                        job.get("match_score", 50),
+                        rec,
+                        job.get("one_line_reasoning", ""),
+                        matching_skills,
+                        missing_skills,
+                        job.get("is_seen", 0),
+                        job.get("is_applied", 0),
+                        job.get("status", "new"),
+                        job.get("status_updated_at"),
+                        job.get("cover_letter_draft", ""),
+                        job.get("created_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    ),
+                )
+            conn.commit()
+        except Exception:
+            pass
+
+
 def load_shortlist_from_db(
     run_id: Optional[str] = None, db_path: Path = DB_FILE
 ) -> List[Dict[str, Any]]:
@@ -257,6 +321,10 @@ def load_shortlist_from_db(
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+
+        # Auto-seed initial jobs if database is empty on Render
+        seed_db_from_json_if_empty(conn)
+
         if run_id:
             cursor.execute(
                 "SELECT * FROM shortlisted_jobs WHERE run_id = ? ORDER BY match_score DESC",
@@ -268,6 +336,13 @@ def load_shortlist_from_db(
                 "SELECT * FROM shortlisted_jobs WHERE run_id = (SELECT run_id FROM shortlisted_jobs ORDER BY id DESC LIMIT 1) ORDER BY match_score DESC"
             )
         rows = cursor.fetchall()
+
+        # Fallback to top shortlisted jobs if latest run query yielded no rows
+        if not rows and not run_id:
+            cursor.execute(
+                "SELECT * FROM shortlisted_jobs ORDER BY match_score DESC LIMIT 30"
+            )
+            rows = cursor.fetchall()
         jobs = []
         for row in rows:
             jobs.append(
