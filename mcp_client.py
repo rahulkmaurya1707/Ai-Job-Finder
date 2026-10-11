@@ -33,7 +33,7 @@ def call_remote_tool_sync(
         try:
             async with httpx.AsyncClient(
                 headers=headers,
-                timeout=60.0
+                timeout=120.0
             ) as http_client:
 
                 async with streamable_http_client(
@@ -56,7 +56,7 @@ def call_remote_tool_sync(
                             }
                         )
 
-                        if getattr(response, "is_error", False):
+                        if getattr(response, "is_error", getattr(response, "isError", False)):
                             print(
                                 f"[Remote MCP Error] Tool failed: {tool_name}"
                             )
