@@ -2,6 +2,7 @@
 import os
 import json
 import asyncio
+import httpx
 
 from mcp.client.streamable_http import streamable_http_client
 from mcp.client.session import ClientSession
@@ -27,46 +28,50 @@ def call_remote_tool_sync(
         headers = {"X-API-Key": api_key}
 
         try:
-            async with streamable_http_client(
-                url=RENDER_URL,
-                headers=headers
-            ) as (read_stream, write_stream, _):
+            async with httpx.AsyncClient(
+                headers=headers,
+                timeout=60.0
+            ) as http_client:
 
-                async with ClientSession(
-                    read_stream,
-                    write_stream
-                ) as session:
+                async with streamable_http_client(
+                    RENDER_URL,
+                    http_client=http_client
+                ) as (read_stream, write_stream, _):
 
-                    await session.initialize()
+                    async with ClientSession(
+                        read_stream,
+                        write_stream
+                    ) as session:
 
-                    response = await session.call_tool(
-                        tool_name,
-                        arguments={
-                            "query": query,
-                            "location": location
-                        }
-                    )
+                        await session.initialize()
 
-                    if response.isError:
-                        print(
-                            f"[Remote MCP Error] Tool failed: {tool_name}"
+                        response = await session.call_tool(
+                            tool_name,
+                            arguments={
+                                "query": query,
+                                "location": location
+                            }
                         )
-                        return []
 
-                    if not response.content:
-                        return []
+                        if response.isError:
+                            print(
+                                f"[Remote MCP Error] Tool failed: {tool_name}"
+                            )
+                            return []
 
-                    text_output = response.content[0].text
+                        if not response.content:
+                            return []
 
-                    try:
-                        return json.loads(text_output)
-                    except (json.JSONDecodeError, AttributeError):
-                        return text_output
+                        text_output = response.content[0].text
+
+                        try:
+                            return json.loads(text_output)
+                        except (json.JSONDecodeError, AttributeError):
+                            return text_output
 
         except Exception as e:
             print(
-                f"[Remote MCP Error] Failed to call "
-                f"{tool_name}: {e}"
+                f"[Remote MCP Error] Failed to call {tool_name}: {e}"
             )
             return []
 
@@ -74,7 +79,6 @@ def call_remote_tool_sync(
 
 
 # Job-search tool wrappers
-
 
 def search_linkedin(query: str, location: str = ""):
     return call_remote_tool_sync(
