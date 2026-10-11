@@ -56,7 +56,7 @@ def call_remote_tool_sync(
                             }
                         )
 
-                        if response.isError:
+                        if getattr(response, "is_error", False):
                             print(
                                 f"[Remote MCP Error] Tool failed: {tool_name}"
                             )
