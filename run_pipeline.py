@@ -45,8 +45,10 @@ def main():
         resume_summary = (
             f"{profile.name} - Senior Software & AI Engineer. "
             f"Expertise in {', '.join(profile.skills)}. {profile.experience_years} years experience."
-        )
-    store_resume_vector(user_name=profile.name, resume_text=resume_summary)
+    try:
+        store_resume_vector(user_name=profile.name, resume_text=resume_summary)
+    except Exception as e:
+        logger.warning(f"Chroma vector store seeding skipped: {e}")
 
     initial_state = {
         "profile": profile,
