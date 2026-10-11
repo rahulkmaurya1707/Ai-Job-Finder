@@ -111,7 +111,13 @@ def search_sources_node(state: GraphState) -> Dict[str, Any]:
     )
 
     search_roles = roles[:2] if len(roles) > 2 else roles
-    search_locations = locations[:1] if len(locations) > 1 else locations
+    search_locations = []
+    if locations:
+        search_locations.append(locations[0])
+    if profile and getattr(profile, "remote_ok", True) and "Remote" not in search_locations:
+        search_locations.append("Remote")
+    if not search_locations:
+        search_locations = ["Remote"]
 
     enabled_sources = settings.JOB_SOURCES
     active_tools = [
