@@ -37,7 +37,6 @@ SEARCH_TOOLS = [
 ]
 
 
-
 def load_profile_node(state: GraphState) -> Dict[str, Any]:
     """Node 1: Load UserProfile and resume summary into graph state."""
     profile = (
@@ -53,7 +52,7 @@ def load_profile_node(state: GraphState) -> Dict[str, Any]:
         )
     resume_summary = (
         state.get("resume_summary")
-        or f"{profile.name} - Skills: {', '.join(profile.skills)}"
+        or f"{profile.name}\nSkills: {', '.join(profile.skills)}"
     )
     return {"profile": profile, "resume_summary": resume_summary}
 
@@ -63,7 +62,7 @@ async def _fetch_jobs_async(
     tool_fn: Any,
     role: str,
     loc: str,
-    timeout_seconds: float = 8.0,
+    timeout_seconds: float = 60.0,  # Increased to 60s for cloud scraping
     max_attempts: int = 1,
     delay_seconds: float = 0.5,
 ) -> List[Dict[str, Any]]:
@@ -89,8 +88,6 @@ async def _fetch_jobs_async(
             logger.warning(
                 f"Source '{tool_name}' failed with error: {str(e)}."
             )
-
-    return []
 
     logger.warning(
         f"Source '{tool_name}' failed after {max_attempts} attempts. Marking as failed for this run."
