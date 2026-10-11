@@ -37,23 +37,28 @@ LOCAL_PORTAL_TOOLS = {
 }
 
 
+_remote_healthy: bool = True
+
+
 def call_remote_tool_sync(
     tool_name: str,
     query: str,
     location: str = ""
 ) -> list:
     """Call a remote MCP tool using Streamable HTTP, with automatic fallback to local scraper."""
+    global _remote_healthy
 
     api_key = os.environ.get("MCP_API_KEY", "")
+    disable_remote = os.environ.get("DISABLE_REMOTE_MCP", "").lower() in ["1", "true", "yes"]
 
-    if api_key:
+    if api_key and _remote_healthy and not disable_remote:
         async def _run():
             headers = {"X-API-Key": api_key}
 
             try:
                 async with httpx.AsyncClient(
                     headers=headers,
-                    timeout=120.0
+                    timeout=15.0  # Rapid timeout to avoid blocking on unresponsive/502 cloud services
                 ) as http_client:
 
                     async with streamable_http_client(
@@ -77,9 +82,6 @@ def call_remote_tool_sync(
                             )
 
                             if getattr(response, "is_error", getattr(response, "isError", False)):
-                                print(
-                                    f"[Remote MCP Error] Tool failed: {tool_name}"
-                                )
                                 return []
 
                             if not response.content:
@@ -92,29 +94,34 @@ def call_remote_tool_sync(
                             except (json.JSONDecodeError, AttributeError):
                                 return text_output
 
-            except Exception as e:
-                print(f"[Remote MCP Error] Failed to call {tool_name}: {e}")
-                traceback.print_exc()
-                # If wrapped inside ExceptionGroup or TaskGroup, unpack sub-exceptions
-                if hasattr(e, "exceptions"):
-                    for idx, sub_exc in enumerate(e.exceptions, start=1):
-                        print(f"--- Sub-exception {idx} for {tool_name}: {sub_exc} ---")
-                        traceback.print_exception(type(sub_exc), sub_exc, sub_exc.__traceback__)
+            except BaseException as e:
+                err_msg = str(e)
+                # Catch 502 Bad Gateway or connection failures and trip circuit breaker
+                if "502" in err_msg or "Connection failed" in err_msg or "ConnectError" in err_msg:
+                    print(f"[Remote MCP Status] Server unreachable or 502 ({err_msg}). Falling back to local scraper.")
+                else:
+                    print(f"[Remote MCP Status] Remote tool call failed: {e}. Falling back to local scraper.")
                 return []
 
         try:
             results = asyncio.run(_run())
             if isinstance(results, list) and len(results) > 0:
                 return results
-        except Exception as e:
-            print(f"[Remote MCP Error] Execution failed for {tool_name}: {e}")
+            elif results == []:
+                # If remote call returned empty or failed, consider remote unhealthy for this batch
+                pass
+        except BaseException as e:
+            err_msg = str(e)
+            if "502" in err_msg or "Connection failed" in err_msg:
+                _remote_healthy = False
+            print(f"[Remote MCP Status] Remote execution failed for {tool_name}: {e}. Using local scraper.")
 
-    # Fallback to local scraping tools if remote call is unconfigured, unreachable, or returned no data
+    # Fallback to local scraping tools: directly scrapes RemoteOK, Remotive, Arbeitnow, Jobicy, etc.
     local_fn = LOCAL_PORTAL_TOOLS.get(tool_name)
     if local_fn:
         try:
             return local_fn(query=query, location=location)
-        except Exception as err:
+        except BaseException as err:
             print(f"[Local Scraper Error] {tool_name} failed: {err}")
             return []
 

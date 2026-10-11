@@ -97,14 +97,19 @@ if __name__ == "__main__":
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import JSONResponse
 
-    api_key = os.environ.get("MCP_API_KEY")
-    if not api_key:
-        raise RuntimeError("MCP_API_KEY environment variable is required")
+    api_key = os.environ.get("MCP_API_KEY", "")
 
     class APIKeyMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
+            # Allow Render health checks and ping endpoints without authentication
+            if request.url.path in ["/", "/health", "/healthz", "/ping"]:
+                return JSONResponse(
+                    {"status": "ok", "service": "mcp-server"},
+                    status_code=200,
+                )
+
             supplied_key = request.headers.get("X-API-Key", "")
-            if not hmac.compare_digest(supplied_key, api_key):
+            if api_key and not hmac.compare_digest(supplied_key, api_key):
                 return JSONResponse(
                     {"error": "Unauthorized"},
                     status_code=401,

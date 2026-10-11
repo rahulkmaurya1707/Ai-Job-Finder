@@ -84,9 +84,9 @@ async def _fetch_jobs_async(
             logger.warning(
                 f"Source '{tool_name}' timed out after {timeout_seconds}s for query '{role}'."
             )
-        except Exception as e:
+        except BaseException as e:
             logger.warning(
-                f"Source '{tool_name}' failed with error: {str(e)}."
+                f"Source '{tool_name}' encountered error: {str(e)}. Handled safely."
             )
 
     logger.warning(
