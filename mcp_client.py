@@ -1,10 +1,10 @@
 import os
 import json
 import asyncio
-from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 from mcp.client.session import ClientSession
 
-RENDER_URL = "https://ai-job-finder-mcp.onrender.com/sse"
+RENDER_URL = "https://ai-job-finder-mcp.onrender.com/mcp"
 
 def call_remote_tool_sync(tool_name: str, query: str, location: str) -> list:
     """Creates a temporary event loop to securely call the Render MCP backend via SSE."""
@@ -13,7 +13,7 @@ def call_remote_tool_sync(tool_name: str, query: str, location: str) -> list:
         headers = {"X-API-Key": api_key}
         
         try:
-            async with sse_client(url=RENDER_URL, headers=headers) as (read_stream, write_stream):
+            async with streamablehttp_client(url=RENDER_URL, headers=headers) as (read_stream, write_stream, _):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
                     
