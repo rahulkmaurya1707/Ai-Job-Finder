@@ -1,20 +1,23 @@
-
 import os
 import json
 import asyncio
+import traceback
 import httpx
 
 from mcp.client.streamable_http import streamable_http_client
 from mcp.client.session import ClientSession
 
 
-RENDER_URL = "https://ai-job-finder-mcp.onrender.com/mcp"
+RENDER_URL = os.environ.get(
+    "MCP_SERVER_URL",
+    "https://ai-job-finder-mcp.onrender.com/mcp"
+)
 
 
 def call_remote_tool_sync(
     tool_name: str,
     query: str,
-    location: str
+    location: str = ""
 ) -> list:
     """Call a remote MCP tool using Streamable HTTP."""
 
@@ -70,9 +73,13 @@ def call_remote_tool_sync(
                             return text_output
 
         except Exception as e:
-            print(
-                f"[Remote MCP Error] Failed to call {tool_name}: {e}"
-            )
+            print(f"[Remote MCP Error] Failed to call {tool_name}: {e}")
+            traceback.print_exc()
+            # If wrapped inside ExceptionGroup or TaskGroup, unpack sub-exceptions
+            if hasattr(e, "exceptions"):
+                for idx, sub_exc in enumerate(e.exceptions, start=1):
+                    print(f"--- Sub-exception {idx} for {tool_name}: {sub_exc} ---")
+                    traceback.print_exception(type(sub_exc), sub_exc, sub_exc.__traceback__)
             return []
 
     return asyncio.run(_run())
@@ -81,48 +88,32 @@ def call_remote_tool_sync(
 # Job-search tool wrappers
 
 def search_linkedin(query: str, location: str = ""):
-    return call_remote_tool_sync(
-        "search_linkedin", query, location
-    )
+    return call_remote_tool_sync("search_linkedin", query, location)
 
 
 def search_naukri(query: str, location: str = ""):
-    return call_remote_tool_sync(
-        "search_naukri", query, location
-    )
+    return call_remote_tool_sync("search_naukri", query, location)
 
 
 def search_indeed(query: str, location: str = ""):
-    return call_remote_tool_sync(
-        "search_indeed", query, location
-    )
+    return call_remote_tool_sync("search_indeed", query, location)
 
 
 def search_remoteok(query: str, location: str = ""):
-    return call_remote_tool_sync(
-        "search_remoteok", query, location
-    )
+    return call_remote_tool_sync("search_remoteok", query, location)
 
 
 def search_weworkremotely(query: str, location: str = ""):
-    return call_remote_tool_sync(
-        "search_weworkremotely", query, location
-    )
+    return call_remote_tool_sync("search_weworkremotely", query, location)
 
 
 def search_jobicy(query: str, location: str = ""):
-    return call_remote_tool_sync(
-        "search_jobicy", query, location
-    )
+    return call_remote_tool_sync("search_jobicy", query, location)
 
 
 def search_arbeitnow(query: str, location: str = ""):
-    return call_remote_tool_sync(
-        "search_arbeitnow", query, location
-    )
+    return call_remote_tool_sync("search_arbeitnow", query, location)
 
 
 def search_remotive(query: str, location: str = ""):
-    return call_remote_tool_sync(
-        "search_remotive", query, location
-    )
+    return call_remote_tool_sync("search_remotive", query, location)
