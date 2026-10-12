@@ -21,11 +21,25 @@ ENTRY_KEYWORDS = [
 ]
 
 
+from config.indian_company_filter import (
+    INDIAN_CITIES,
+    INDIAN_STATES,
+    INDIAN_COMPANIES,
+    FOREIGN_LOCATION_KEYWORDS,
+    FOREIGN_COMPANIES,
+    is_indian_company_or_job,
+)
+
+
 def is_location_matched(
     job_location: str, preferred_locations: List[str], remote_ok: bool
 ) -> bool:
     """Check if job location matches user's location preferences or remote setting."""
     job_loc_lower = (job_location or "").lower()
+
+    # Disallow foreign locations even under remote setting
+    if any(fl in job_loc_lower for fl in FOREIGN_LOCATION_KEYWORDS) and "india" not in job_loc_lower:
+        return False
 
     if remote_ok:
         return True
@@ -64,9 +78,9 @@ def is_seniority_matched(job_title: str, experience_years: float) -> bool:
 
 
 def filter_job_postings(
-    jobs: List[Dict[str, Any]], profile: UserProfile
+    jobs: List[Dict[str, Any]], profile: UserProfile, indian_only: bool = False
 ) -> Tuple[List[Dict[str, Any]], int]:
-    """Filter postings outside preferred locations (unless remote_ok) or wrong seniority level."""
+    """Filter postings outside preferred locations (unless remote_ok), wrong seniority level, or non-Indian companies."""
     filtered_jobs = []
     dropped_count = 0
 
@@ -77,12 +91,17 @@ def filter_job_postings(
         title = job.get("title", "")
         loc = job.get("location", "")
 
-        # 1. Location filter
+        # 1. Indian company filter if requested
+        if indian_only and not is_indian_company_or_job(job):
+            dropped_count += 1
+            continue
+
+        # 2. Location filter
         if not is_location_matched(loc, profile.locations if profile else [], profile.remote_ok if profile else True):
             dropped_count += 1
             continue
 
-        # 2. Seniority & experience band filter
+        # 3. Seniority & experience band filter
         if not is_seniority_matched(title, profile.experience_years if profile else 0.0):
             dropped_count += 1
             continue
@@ -90,4 +109,5 @@ def filter_job_postings(
         filtered_jobs.append(job)
 
     return filtered_jobs, dropped_count
+
 

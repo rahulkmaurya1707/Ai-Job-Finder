@@ -45,6 +45,25 @@ class ResumeVectorStore:
             query_texts=[query_text], n_results=n_results
         )
 
+    def delete_resume(self, user_name: str) -> None:
+        """Remove a specific user's resume embedding from ChromaDB."""
+        doc_id = f"resume_{user_name.lower().replace(' ', '_')}"
+        try:
+            self.collection.delete(ids=[doc_id])
+        except Exception:
+            pass
+
+    def clear_all_resumes(self) -> None:
+        """Remove all stored resume documents from ChromaDB collection."""
+        try:
+            res = self.collection.get()
+            all_ids = res.get("ids", []) if res else []
+            if all_ids:
+                self.collection.delete(ids=all_ids)
+        except Exception:
+            pass
+
+
 
 _vector_store_instance: Optional[ResumeVectorStore] = None
 
@@ -107,3 +126,16 @@ def search_resume_vector_store(query_text: str = "ping", n_results: int = 5) -> 
         "metadatas": metas_list,
         "distances": dists_list,
     }
+
+
+def delete_resume_vector(user_name: str) -> None:
+    """Convenience function to delete a user's resume embedding from ChromaDB."""
+    store = get_vector_store()
+    store.delete_resume(user_name)
+
+
+def clear_all_resume_vectors() -> None:
+    """Convenience function to delete all resume embeddings from ChromaDB."""
+    store = get_vector_store()
+    store.clear_all_resumes()
+

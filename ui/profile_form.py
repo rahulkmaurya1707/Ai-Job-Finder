@@ -1,17 +1,29 @@
 import streamlit as st
 from profile.user_profile import UserProfile
-from storage.profile_storage import (
-    save_profile_to_json,
-    save_profile_to_db,
-    load_profile_from_json,
-)
 
 st.set_page_config(page_title="User Profile Form", page_icon="👤")
 
 st.title("👤 Job Finder - User Profile")
 
-# Load existing profile if available
-existing_profile = load_profile_from_json()
+st.info(
+    "🔒 **Session Privacy Protected:** Candidate details exist only in memory during your active browser session. "
+    "Once you close this site or browser tab, all profile and resume details are automatically removed."
+)
+
+if "session_profile" not in st.session_state or st.session_state["session_profile"] is None:
+    st.session_state["session_profile"] = UserProfile(
+        name="",
+        skills=[],
+        preferred_roles=[],
+        experience_years=0.0,
+        min_salary=None,
+        max_salary=None,
+        locations=[],
+        remote_ok=True,
+        raw_resume_text="",
+    )
+
+existing_profile = st.session_state["session_profile"]
 
 with st.form("user_profile_form"):
     name = st.text_input(
@@ -31,7 +43,7 @@ with st.form("user_profile_form"):
         "Years of Experience",
         min_value=0.0,
         max_value=50.0,
-        value=existing_profile.experience_years if existing_profile else 0.0,
+        value=float(existing_profile.experience_years) if existing_profile and existing_profile.experience_years is not None else 0.0,
         step=0.5,
     )
 
@@ -40,14 +52,14 @@ with st.form("user_profile_form"):
         min_salary = st.number_input(
             "Minimum Salary",
             min_value=0.0,
-            value=existing_profile.min_salary or 0.0 if existing_profile else 0.0,
+            value=float(existing_profile.min_salary or 0.0) if existing_profile else 0.0,
             step=5000.0,
         )
     with col2:
         max_salary = st.number_input(
             "Maximum Salary",
             min_value=0.0,
-            value=existing_profile.max_salary or 0.0 if existing_profile else 0.0,
+            value=float(existing_profile.max_salary or 0.0) if existing_profile else 0.0,
             step=5000.0,
         )
 
@@ -81,10 +93,10 @@ with st.form("user_profile_form"):
                 max_salary=max_salary if max_salary > 0 else None,
                 locations=[l.strip() for l in locations.split(",") if l.strip()],
                 remote_ok=remote_ok,
+                raw_resume_text=existing_profile.raw_resume_text if existing_profile else "",
             )
-            save_profile_to_json(profile)
-            save_profile_to_db(profile)
-            st.success("Profile saved successfully to JSON and SQLite!")
+            st.session_state["session_profile"] = profile
+            st.success("Profile saved for this active session! (Cleared when site is closed)")
             st.rerun()
 
     if cleared:
@@ -99,7 +111,7 @@ with st.form("user_profile_form"):
             remote_ok=True,
             raw_resume_text="",
         )
-        save_profile_to_json(empty_profile)
-        save_profile_to_db(empty_profile)
+        st.session_state["session_profile"] = empty_profile
         st.toast("Candidate profile cleared!", icon="🧹")
         st.rerun()
+

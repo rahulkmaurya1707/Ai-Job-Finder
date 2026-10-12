@@ -124,6 +124,43 @@ def save_profile_to_json(
 def load_profile_from_json(file_path: Path = JSON_FILE) -> Optional[UserProfile]:
     if not file_path.exists():
         return None
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-        return UserProfile(**data)
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if not data or not isinstance(data, dict):
+                return None
+            name = str(data.get("name") or "").strip()
+            # If name is blank or default empty placeholder, treat as no saved profile
+            if not name:
+                return None
+            return UserProfile(**data)
+    except Exception:
+        return None
+
+
+def clear_profile_from_json(file_path: Path = JSON_FILE) -> None:
+    """Reset user_profile.json so no user resume details remain on disk."""
+    empty_data = {
+        "name": "",
+        "skills": [],
+        "preferred_roles": [],
+        "experience_years": 0.0,
+        "min_salary": None,
+        "max_salary": None,
+        "locations": [],
+        "remote_ok": True,
+        "raw_resume_text": None,
+    }
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(empty_data, f, indent=2)
+
+
+def clear_all_profiles_from_db(db_path: Path = DB_FILE) -> None:
+    """Clear all profiles and resume data from profiles table in SQLite."""
+    init_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM profiles")
+        conn.commit()
+

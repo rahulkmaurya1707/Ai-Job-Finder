@@ -113,11 +113,11 @@ def search_sources_node(state: GraphState) -> Dict[str, Any]:
     search_roles = roles[:2] if len(roles) > 2 else roles
     search_locations = []
     if locations:
-        search_locations.append(locations[0])
-    if profile and getattr(profile, "remote_ok", True) and "Remote" not in search_locations:
-        search_locations.append("Remote")
-    if not search_locations:
-        search_locations = ["Remote"]
+        for loc in locations:
+            if loc and loc.strip() and loc.strip().lower() != "remote":
+                search_locations.append(loc.strip())
+    if not search_locations or "india" not in [s.lower() for s in search_locations]:
+        search_locations.append("India")
 
     enabled_sources = settings.JOB_SOURCES
     active_tools = [
@@ -164,10 +164,12 @@ def dedupe_node(state: GraphState) -> Dict[str, Any]:
 
 
 def filter_node(state: GraphState) -> Dict[str, Any]:
-    """Node 4: Filter out postings by location preference and seniority level."""
+    """Node 4: Filter out postings by location preference, seniority level, and Indian company check."""
     deduped_postings = state.get("deduped_postings") or []
     profile = state.get("profile")
-    filtered_postings, dropped_filters = filter_job_postings(deduped_postings, profile)
+    filtered_postings, dropped_filters = filter_job_postings(
+        deduped_postings, profile, indian_only=True
+    )
     logger.info(
         f"[METRICS] Postings passed filters: {len(filtered_postings)} (Filtered out: {dropped_filters})"
     )

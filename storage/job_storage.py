@@ -322,9 +322,6 @@ def load_shortlist_from_db(
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        # Auto-seed initial jobs if database is empty on Render
-        seed_db_from_json_if_empty(conn)
-
         if run_id:
             cursor.execute(
                 "SELECT * FROM shortlisted_jobs WHERE run_id = ? ORDER BY match_score DESC",
@@ -522,19 +519,46 @@ def update_shortlist_job_status(
         conn.commit()
 
 
-def get_application_analytics(db_path: Path = DB_FILE) -> Dict[str, Any]:
+def clear_all_shortlisted_jobs(db_path: Path = DB_FILE) -> None:
+    """Clear all shortlisted and evaluated jobs from SQLite database."""
+    init_jobs_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM shortlisted_jobs")
+        cursor.execute("DELETE FROM evaluated_jobs")
+        conn.commit()
+
+
+def get_application_analytics(
+    db_path: Any = None,
+    run_id: Optional[str] = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
     """Calculate application metrics:
     - Average score of applied jobs
     - Average score of jobs that got interviews/offers
     - Frequently missing skills in rejected applications
     - Status breakdown counts
     """
+    if "run_id" in kwargs and not run_id:
+        run_id = kwargs["run_id"]
+    if isinstance(db_path, str) and not db_path.endswith(".db"):
+        run_id = db_path
+        db_path = DB_FILE
+    if db_path is None:
+        db_path = DB_FILE
+    elif isinstance(db_path, str):
+        db_path = Path(db_path)
+
     init_jobs_db(db_path)
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM shortlisted_jobs")
+        if run_id:
+            cursor.execute("SELECT * FROM shortlisted_jobs WHERE run_id = ?", (run_id,))
+        else:
+            cursor.execute("SELECT * FROM shortlisted_jobs")
         all_jobs = cursor.fetchall()
 
         cursor.execute("SELECT * FROM job_outcomes")

@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from typing import List, Dict
 import requests
 from bs4 import BeautifulSoup
+from config.indian_company_filter import is_indian_company_or_job
 
 HEADERS = {
     "User-Agent": (
@@ -86,17 +87,17 @@ def search_remoteok_jobs(query: str, location: str = "") -> List[Dict[str, str]]
                 match_found = not query_lower or (query_lower in combined_text) or any(w in combined_text for w in query_words)
 
                 if match_found:
-                    jobs.append(
-                        format_job_item(
-                            title=position,
-                            company=company,
-                            location=loc if loc else (location or "Remote"),
-                            description=description[:400],
-                            posted_date=date_str,
-                            apply_url=apply_link,
-                            source="RemoteOK",
-                        )
+                    item = format_job_item(
+                        title=position,
+                        company=company,
+                        location=loc if loc else (location or "Remote"),
+                        description=description[:400],
+                        posted_date=date_str,
+                        apply_url=apply_link,
+                        source="RemoteOK",
                     )
+                    if is_indian_company_or_job(item):
+                        jobs.append(item)
             return jobs[:12]
     except Exception:
         pass
@@ -139,17 +140,17 @@ def search_weworkremotely_jobs(
                 match_found = not query_lower or (query_lower in combined_item) or any(w in combined_item for w in query_words)
 
                 if match_found:
-                    jobs.append(
-                        format_job_item(
-                            title=title,
-                            company=company,
-                            location=location or "Remote",
-                            description=description[:400],
-                            posted_date=pub_date,
-                            apply_url=link,
-                            source="WeWorkRemotely",
-                        )
+                    item = format_job_item(
+                        title=title,
+                        company=company,
+                        location=location or "Remote",
+                        description=description[:400],
+                        posted_date=pub_date,
+                        apply_url=link,
+                        source="WeWorkRemotely",
                     )
+                    if is_indian_company_or_job(item):
+                        jobs.append(item)
             return jobs[:12]
     except Exception:
         pass
@@ -181,17 +182,17 @@ def search_jobicy_jobs(query: str, location: str = "") -> List[Dict[str, str]]:
                 combined = f"{title} {desc} {company}".lower()
                 match_found = not query_lower or (query_lower in combined) or any(w in combined for w in query_words)
                 if match_found:
-                    jobs.append(
-                        format_job_item(
-                            title=title,
-                            company=company,
-                            location=loc or "Remote",
-                            description=desc[:400],
-                            posted_date=date_str,
-                            apply_url=link,
-                            source="Jobicy",
-                        )
+                    job_item = format_job_item(
+                        title=title,
+                        company=company,
+                        location=loc or "Remote",
+                        description=desc[:400],
+                        posted_date=date_str,
+                        apply_url=link,
+                        source="Jobicy",
                     )
+                    if is_indian_company_or_job(job_item):
+                        jobs.append(job_item)
             return jobs[:12]
     except Exception:
         pass
@@ -224,17 +225,17 @@ def search_arbeitnow_jobs(query: str, location: str = "") -> List[Dict[str, str]
                 combined = f"{title} {desc} {company}".lower()
                 match_found = not query_lower or (query_lower in combined) or any(w in combined for w in query_words)
                 if match_found:
-                    jobs.append(
-                        format_job_item(
-                            title=title,
-                            company=company,
-                            location=loc_str,
-                            description=desc[:400],
-                            posted_date="",
-                            apply_url=link,
-                            source="Arbeitnow",
-                        )
+                    job_item = format_job_item(
+                        title=title,
+                        company=company,
+                        location=loc_str,
+                        description=desc[:400],
+                        posted_date="",
+                        apply_url=link,
+                        source="Arbeitnow",
                     )
+                    if is_indian_company_or_job(job_item):
+                        jobs.append(job_item)
             return jobs[:12]
     except Exception:
         pass
@@ -261,17 +262,17 @@ def search_remotive_jobs(query: str, location: str = "") -> List[Dict[str, str]]
                 date_str = item.get("publication_date", "")
                 link = item.get("url", "")
 
-                jobs.append(
-                    format_job_item(
-                        title=title,
-                        company=company,
-                        location=loc or "Remote",
-                        description=desc[:400],
-                        posted_date=date_str,
-                        apply_url=link,
-                        source="Remotive",
-                    )
+                job_item = format_job_item(
+                    title=title,
+                    company=company,
+                    location=loc or "Remote",
+                    description=desc[:400],
+                    posted_date=date_str,
+                    apply_url=link,
+                    source="Remotive",
                 )
+                if is_indian_company_or_job(job_item):
+                    jobs.append(job_item)
             return jobs[:12]
     except Exception:
         pass
@@ -283,8 +284,13 @@ def search_linkedin_jobs(query: str, location: str = "") -> List[Dict[str, str]]
     if str(query).lower().strip() == "ping":
         return [format_job_item(title="Ping Reachable", source="LinkedIn")]
 
+    # Default to India location so search results return Indian companies
+    target_loc = location.strip() if location and location.strip() else "India"
+    if target_loc.lower() in ("remote", "global", "worldwide"):
+        target_loc = "India"
+
     q_encoded = urllib.parse.quote(query)
-    l_encoded = urllib.parse.quote(location or "Remote")
+    l_encoded = urllib.parse.quote(target_loc)
     url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={q_encoded}&location={l_encoded}"
 
     try:
@@ -301,19 +307,19 @@ def search_linkedin_jobs(query: str, location: str = "") -> List[Dict[str, str]]
                 date_elem = card.find("time")
 
                 if title_elem and title_elem.text.strip():
-                    jobs.append(
-                        format_job_item(
-                            title=title_elem.text.strip(),
-                            company=company_elem.text.strip() if company_elem else "",
-                            location=loc_elem.text.strip() if loc_elem else (location or "Remote"),
-                            description=f"{title_elem.text.strip()} at {company_elem.text.strip() if company_elem else 'LinkedIn'}",
-                            posted_date=date_elem.text.strip() if date_elem else "",
-                            apply_url=link_elem["href"].strip()
-                            if link_elem and "href" in link_elem.attrs
-                            else url,
-                            source="LinkedIn",
-                        )
+                    item = format_job_item(
+                        title=title_elem.text.strip(),
+                        company=company_elem.text.strip() if company_elem else "",
+                        location=loc_elem.text.strip() if loc_elem else target_loc,
+                        description=f"{title_elem.text.strip()} at {company_elem.text.strip() if company_elem else 'LinkedIn'}",
+                        posted_date=date_elem.text.strip() if date_elem else "",
+                        apply_url=link_elem["href"].strip()
+                        if link_elem and "href" in link_elem.attrs
+                        else url,
+                        source="LinkedIn",
                     )
+                    if is_indian_company_or_job(item):
+                        jobs.append(item)
             return jobs[:12]
     except Exception:
         pass

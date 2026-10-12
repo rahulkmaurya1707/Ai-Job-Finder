@@ -1,46 +1,11 @@
 {
-  "name": "Rahul Kumar Maurya",
-  "skills": [
-    "Java",
-    "Python",
-    "JavaScript",
-    "HTML",
-    "CSS",
-    "React.js",
-    "Redux Toolkit",
-    "Tailwind CSS",
-    "Node.js",
-    "Express.js",
-    "REST APIs",
-    "LangChain",
-    "LangGraph",
-    "ChromaDB",
-    "Groq API",
-    "Streamlit",
-    "MongoDB",
-    "MongoDB Atlas",
-    "SQLite",
-    "Git",
-    "GitHub",
-    "VS Code",
-    "Data Structures and Algorithms",
-    "Object-Oriented Programming",
-    "Windows Task Scheduler",
-    "pytest"
-  ],
-  "preferred_roles": [
-    "Software Developer",
-    "Full Stack Developer",
-    "Software Engineer"
-  ],
+  "name": "",
+  "skills": [],
+  "preferred_roles": [],
   "experience_years": 0.0,
   "min_salary": null,
   "max_salary": null,
-  "locations": [
-    "Varanasi",
-    "Uttar Pradesh",
-    "Uttar Pradesh"
-  ],
+  "locations": [],
   "remote_ok": true,
   "raw_resume_text": null
 }

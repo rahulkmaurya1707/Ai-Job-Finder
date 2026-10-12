@@ -14,7 +14,9 @@ setup_logging()
 logger = get_logger("run_pipeline")
 
 
-def main():
+from typing import Optional
+
+def main(profile: Optional[UserProfile] = None):
     logger.info("==================================================")
     logger.info("Running Job Finder LangGraph Pipeline End-to-End")
     logger.info("==================================================")
@@ -22,17 +24,20 @@ def main():
     # Ping each MCP tool briefly before a full run and log any that are unreachable
     ping_mcp_tools()
 
-    profile = load_profile_from_json()
-    if not profile:
-        profile = UserProfile(
-            name="Candidate",
-            skills=["Python", "JavaScript", "React", "Node.js", "SQL", "Git"],
-            preferred_roles=["Software Engineer", "Full-Stack Developer", "Frontend Developer"],
-            experience_years=0.0,
-            remote_ok=True,
-        )
-        save_profile_to_json(profile)
-        save_profile_to_db(profile)
+    if profile is None or not (profile.name and profile.name.strip()):
+        loaded = load_profile_from_json()
+        if loaded and loaded.name and loaded.name.strip():
+            profile = loaded
+        else:
+            profile = UserProfile(
+                name="Candidate",
+                skills=["Python", "JavaScript", "React", "Node.js", "SQL", "Git"],
+                preferred_roles=["Software Engineer", "Full-Stack Developer", "Frontend Developer"],
+                experience_years=0.0,
+                remote_ok=True,
+            )
+            # Ephemeral candidate: do NOT write to disk to ensure no details leak to subsequent visitors
+
 
     logger.info(f"Loaded Profile for: {profile.name}")
     logger.info(f"Preferred Roles: {profile.preferred_roles}")

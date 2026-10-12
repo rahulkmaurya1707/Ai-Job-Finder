@@ -1,6 +1,8 @@
 import sys
+import importlib
 from pathlib import Path
 from datetime import datetime
+from typing import Optional, List, Dict, Any
 
 # Ensure project root is in sys.path when executed via Streamlit
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -16,6 +18,8 @@ from storage.profile_storage import (
     save_profile_to_json,
     save_profile_to_db,
 )
+import storage.job_storage as job_storage_mod
+importlib.reload(job_storage_mod)
 from storage.job_storage import (
     load_shortlist_from_db,
     update_job_full_status,
@@ -26,8 +30,11 @@ from storage.job_storage import (
 from profile.user_profile import UserProfile
 from config.config import load_pipeline_config, save_pipeline_config
 
+import config.indian_company_filter as indian_filter_mod
+importlib.reload(indian_filter_mod)
+from config.indian_company_filter import is_indian_company_or_job
+
 # Import Modular UI Components
-import importlib
 import ui.components.kpi_card as kpi_module
 import ui.components.job_card as job_module
 import ui.components.kanban as kanban_module
@@ -53,8 +60,62 @@ if styles_path.exists():
     with open(styles_path, "r", encoding="utf-8") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-# Load Candidate Profile for Header & Greeting
-existing_profile = load_profile_from_json()
+import streamlit.components.v1 as components
+
+# Ensure client-side sessionStorage is purged when browser window/tab is unloaded
+components.html(
+    """
+    <script>
+    window.addEventListener("beforeunload", function() {
+        try {
+            sessionStorage.clear();
+        } catch (e) {}
+    });
+    </script>
+    """,
+    height=0,
+)
+
+def get_session_profile() -> UserProfile:
+    """Retrieve or initialize the active candidate profile scoped strictly to this browser session.
+    
+    Resume details are kept in memory (st.session_state). When the site or browser tab is closed,
+    the session is destroyed and all resume details are automatically removed.
+    """
+    if "session_profile" not in st.session_state or st.session_state["session_profile"] is None:
+        st.session_state["session_profile"] = UserProfile(
+            name="",
+            skills=[],
+            preferred_roles=[],
+            experience_years=0.0,
+            min_salary=None,
+            max_salary=None,
+            locations=[],
+            remote_ok=True,
+            raw_resume_text="",
+        )
+    return st.session_state["session_profile"]
+
+def has_active_resume(profile: Optional[UserProfile]) -> bool:
+    """Check if a resume is uploaded or active in current browser session."""
+    if not profile:
+        return False
+    if profile.raw_resume_text and profile.raw_resume_text.strip():
+        return True
+    if profile.name and profile.name.strip() and profile.name.strip() != "Candidate" and profile.skills:
+        return True
+    return bool(st.session_state.get("resume_uploaded", False))
+
+# Initialize ephemeral pipeline session state
+if "pipeline_run_completed" not in st.session_state:
+    st.session_state["pipeline_run_completed"] = False
+if "current_run_id" not in st.session_state:
+    st.session_state["current_run_id"] = None
+if "resume_uploaded" not in st.session_state:
+    st.session_state["resume_uploaded"] = False
+
+# Load Candidate Profile for Header & Greeting from active session
+existing_profile = get_session_profile()
 candidate_name = existing_profile.name.strip() if (existing_profile and existing_profile.name and existing_profile.name.strip()) else "Candidate"
 first_name = candidate_name.split()[0] if candidate_name != "Candidate" else "Candidate"
 user_initials = "".join([p[0].upper() for p in candidate_name.split()[:2]]) if candidate_name != "Candidate" else "CP"
@@ -97,15 +158,22 @@ with hdr_col2:
 
 with hdr_col3:
     if st.button("⚡ RUN JOB PIPELINE 🚀", type="primary", use_container_width=True):
-        with st.spinner("Executing job search scraper & LLM matching pipeline..."):
-            try:
-                from run_pipeline import main as execute_pipeline
-                execute_pipeline()
-                st.cache_data.clear()
-                st.toast("Pipeline complete! Matching jobs synced.", icon="🎉")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Pipeline execution failed: {str(e)}")
+        active_prof = get_session_profile()
+        if not has_active_resume(active_prof):
+            st.warning("⚠️ **Resume Required:** Please upload your resume in the **👤 User Profile** tab first before running the pipeline!")
+        else:
+            with st.spinner("Executing job search scraper & LLM matching pipeline..."):
+                try:
+                    from run_pipeline import main as execute_pipeline
+                    final_state = execute_pipeline(profile=active_prof)
+                    new_run_id = final_state.get("run_id") if isinstance(final_state, dict) else None
+                    st.session_state["pipeline_run_completed"] = True
+                    st.session_state["current_run_id"] = new_run_id
+                    st.cache_data.clear()
+                    st.toast("Pipeline complete! Matching jobs synced for this session.", icon="🎉")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Pipeline execution failed: {str(e)}")
 
 st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
 
@@ -126,10 +194,16 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
 # TAB 1: Job Shortlist
 # -----------------------------------------------------------------------------
 with tab1:
+    greeting_title = f"Welcome back, {first_name}! 👋" if candidate_name != "Candidate" else "Welcome to AI Job Finder! 👋"
+    greeting_subtitle = (
+        "Your AI agent is ready to scan active job portals & match top software roles to your resume."
+        if candidate_name != "Candidate"
+        else "Upload your resume in Profile settings to personalize matching and analyze skills. Session data clears automatically when closed."
+    )
     st.markdown(
         f"""<div class="hero-banner">
-<div class="hero-title">Welcome back, {first_name}! 👋</div>
-<div class="hero-subtitle">Your AI agent is ready to scan active job portals & match top software roles to your resume.</div>
+<div class="hero-title">{greeting_title}</div>
+<div class="hero-subtitle">{greeting_subtitle}</div>
 <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
 <span class="status-dot-green"></span> <span>AI Matcher Active &nbsp;•&nbsp; Target: Entry-Level & Remote &nbsp;•&nbsp; SQLite DB Synced</span>
 </div>
@@ -137,8 +211,16 @@ with tab1:
         unsafe_allow_html=True,
     )
 
-    # Load All Jobs for KPI Summary
-    all_shortlist_jobs = load_shortlist_from_db()
+    # Check if pipeline has been run in active browser session
+    is_pipeline_active = bool(st.session_state.get("pipeline_run_completed", False))
+    current_session_run_id = st.session_state.get("current_run_id")
+
+    # Load Jobs for KPI Summary (ONLY if pipeline was executed in this active session)
+    if is_pipeline_active and current_session_run_id:
+        all_shortlist_jobs = load_shortlist_from_db(run_id=current_session_run_id)
+    else:
+        all_shortlist_jobs = []
+
     total_jobs_cnt = len(all_shortlist_jobs)
     top_matches_cnt = sum(1 for j in all_shortlist_jobs if j.get("evaluation", {}).get("match_score", 0) >= 60)
     applied_cnt = sum(1 for j in all_shortlist_jobs if j.get("is_applied"))
@@ -163,96 +245,148 @@ with tab1:
 
     st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
-    # Search, Filters & Toolbar Controls
-    all_runs = get_all_run_ids()
-    selected_run = None
+    if not is_pipeline_active:
+        active_prof = get_session_profile()
+        has_resume = has_active_resume(active_prof)
 
-    ctrl1, ctrl2, ctrl3, ctrl4, ctrl5, ctrl6, ctrl7 = st.columns([2.0, 1.3, 1.3, 1.3, 1.4, 0.9, 0.9])
-    with ctrl1:
-        search_query = st.text_input(
-            "Search Title/Company",
-            placeholder="Search title, company, skills...",
-            label_visibility="collapsed",
-            key="shortlist_search_input",
+        st.markdown(
+            """<div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
+                border: 1px solid rgba(99, 102, 241, 0.25);
+                border-radius: 16px;
+                padding: 2.25rem 2rem;
+                text-align: center;
+                margin-top: 0.5rem;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);">
+                <div style="font-size: 2.8rem; margin-bottom: 0.5rem;">💼</div>
+                <h2 style="color: #F8FAFC; font-size: 1.5rem; font-weight: 700; margin-bottom: 1.25rem;">
+                    No Jobs Displayed
+                </h2>
+                <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                    <div style="background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 12px; padding: 1rem 1.25rem; text-align: left; max-width: 280px;">
+                        <div style="font-weight: 600; color: #818CF8; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>📄</span> <span>1. Upload Resume</span>
+                        </div>
+                        <div style="font-size: 0.85rem; color: #94A3B8; line-height: 1.4;">Go to the <b>👤 User Profile</b> tab to upload your PDF or DOCX resume.</div>
+                    </div>
+                    <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 1rem 1.25rem; text-align: left; max-width: 280px;">
+                        <div style="font-weight: 600; color: #34D399; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>⚡</span> <span>2. Run Pipeline</span>
+                        </div>
+                        <div style="font-size: 0.85rem; color: #94A3B8; line-height: 1.4;">Click <b>⚡ RUN JOB PIPELINE 🚀</b> to scrape portals and match Indian jobs.</div>
+                    </div>
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
         )
-    with ctrl2:
-        rec_filter = st.selectbox(
-            "Filter Recommendation",
-            options=["All Recommendations", "APPLY", "CONSIDER", "SKIP"],
-            index=0,
-            label_visibility="collapsed",
-            key="shortlist_rec_filter",
-        )
-    with ctrl3:
-        portal_filter = st.selectbox(
-            "Filter Portal",
-            options=["All Portals", "RemoteOK", "WeWorkRemotely", "Jobicy", "Arbeitnow", "Remotive", "LinkedIn", "Indeed", "Naukri"],
-            index=0,
-            label_visibility="collapsed",
-            key="shortlist_portal_filter",
-        )
-    with ctrl4:
-        sort_by = st.selectbox(
-            "Sort By",
-            options=["Match Score", "Newest First"],
-            index=0,
-            label_visibility="collapsed",
-            key="shortlist_sort_by",
-        )
-    with ctrl5:
-        run_options = ["Latest Batch"] + (all_runs if all_runs else [])
-        selected_option = st.selectbox(
-            "Select Run Batch",
-            options=run_options,
-            index=0,
-            label_visibility="collapsed",
-            key="shortlist_run_selector",
-        )
-        if selected_option != "Latest Batch":
-            selected_run = selected_option
-    with ctrl6:
-        hide_seen = st.checkbox("Hide Seen", value=False, key="shortlist_hide_seen")
-    with ctrl7:
-        if st.button("🔄 Refresh", use_container_width=True):
-            st.cache_data.clear()
-            st.toast("Database reloaded.", icon="🔄")
-            st.rerun()
 
-    shortlist_raw = load_shortlist_from_db(run_id=selected_run)
-
-    # Filter Logic
-    shortlist_filtered = []
-    for job in shortlist_raw:
-        eval_data = job.get("evaluation", {})
-        rec_val = str(eval_data.get("recommendation", "Consider")).replace("RecommendationEnum.", "").strip().upper()
-        title_c = str(job.get("title", "")).lower()
-        company_c = str(job.get("company", "")).lower()
-        source_c = str(job.get("source", ""))
-
-        if search_query and (search_query.lower() not in title_c and search_query.lower() not in company_c):
-            continue
-        if rec_filter != "All Recommendations" and rec_val != rec_filter:
-            continue
-        if portal_filter != "All Portals" and source_c != portal_filter:
-            continue
-        if hide_seen and job.get("is_seen"):
-            continue
-        shortlist_filtered.append(job)
-
-    # Sort Logic
-    if sort_by == "Newest First":
-        shortlist_filtered.sort(key=lambda j: j.get("created_at") or j.get("id") or 0, reverse=True)
+        if has_resume:
+            st.markdown("<div style='margin-top: 1.5rem; text-align: center;'>", unsafe_allow_html=True)
+            if st.button("⚡ Run Pipeline with Uploaded Resume Now 🚀", type="primary", key="quick_run_empty_btn", use_container_width=True):
+                with st.spinner("Executing job search scraper & LLM matching pipeline..."):
+                    try:
+                        from run_pipeline import main as execute_pipeline
+                        final_state = execute_pipeline(profile=active_prof)
+                        new_run_id = final_state.get("run_id") if isinstance(final_state, dict) else None
+                        st.session_state["pipeline_run_completed"] = True
+                        st.session_state["current_run_id"] = new_run_id
+                        st.cache_data.clear()
+                        st.toast("Pipeline complete! Matching jobs synced.", icon="🎉")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Pipeline execution failed: {str(e)}")
+            st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.info("💡 **Getting started:** Switch to the **👤 User Profile** tab to upload your resume first.")
     else:
-        shortlist_filtered.sort(key=lambda j: j.get("evaluation", {}).get("match_score", 0), reverse=True)
+        # Search, Filters & Toolbar Controls
+        ctrl1, ctrl2, ctrl3, ctrl4, ctrl5, ctrl6, ctrl7, ctrl8 = st.columns([1.8, 1.2, 1.2, 1.1, 1.3, 0.8, 0.9, 0.8])
+        with ctrl1:
+            search_query = st.text_input(
+                "Search Title/Company",
+                placeholder="Search title, company, skills...",
+                label_visibility="collapsed",
+                key="shortlist_search_input",
+            )
+        with ctrl2:
+            rec_filter = st.selectbox(
+                "Filter Recommendation",
+                options=["All Recommendations", "APPLY", "CONSIDER", "SKIP"],
+                index=0,
+                label_visibility="collapsed",
+                key="shortlist_rec_filter",
+            )
+        with ctrl3:
+            portal_filter = st.selectbox(
+                "Filter Portal",
+                options=["All Portals", "LinkedIn", "Naukri", "Indeed", "RemoteOK", "WeWorkRemotely", "Jobicy", "Arbeitnow", "Remotive"],
+                index=0,
+                label_visibility="collapsed",
+                key="shortlist_portal_filter",
+            )
+        with ctrl4:
+            sort_by = st.selectbox(
+                "Sort By",
+                options=["Match Score", "Newest First"],
+                index=0,
+                label_visibility="collapsed",
+                key="shortlist_sort_by",
+            )
+        with ctrl5:
+            selected_option = st.selectbox(
+                "Select Run Batch",
+                options=["Current Batch"],
+                index=0,
+                label_visibility="collapsed",
+                key="shortlist_run_selector",
+            )
+        with ctrl6:
+            hide_seen = st.checkbox("Hide Seen", value=False, key="shortlist_hide_seen")
+        with ctrl7:
+            indian_only = st.checkbox("🇮🇳 Indian Only", value=True, key="shortlist_indian_only")
+        with ctrl8:
+            if st.button("🔄 Refresh", use_container_width=True):
+                st.cache_data.clear()
+                st.toast("Shortlist reloaded.", icon="🔄")
+                st.rerun()
 
-    if not shortlist_filtered:
-        st.info("💡 No matching job cards found for the selected filters. Click '⚡ RUN JOB PIPELINE 🚀' to scan portals.")
-    else:
-        st.caption(f"Displaying **{len(shortlist_filtered)}** job card(s)")
+        shortlist_raw = all_shortlist_jobs
 
-        # Render Modern Job Cards
-        for idx, job in enumerate(shortlist_filtered):
-            render_job_card(job, idx)
+        # Filter Logic
+        shortlist_filtered = []
+        for job in shortlist_raw:
+            if indian_only and not is_indian_company_or_job(job):
+                continue
+            eval_data = job.get("evaluation", {})
+            rec_val = str(eval_data.get("recommendation", "Consider")).replace("RecommendationEnum.", "").strip().upper()
+            title_c = str(job.get("title", "")).lower()
+            company_c = str(job.get("company", "")).lower()
+            source_c = str(job.get("source", ""))
+
+            if search_query and (search_query.lower() not in title_c and search_query.lower() not in company_c):
+                continue
+            if rec_filter != "All Recommendations" and rec_val != rec_filter:
+                continue
+            if portal_filter != "All Portals" and source_c != portal_filter:
+                continue
+            if hide_seen and job.get("is_seen"):
+                continue
+            shortlist_filtered.append(job)
+
+        # Sort Logic
+        if sort_by == "Newest First":
+            shortlist_filtered.sort(key=lambda j: j.get("created_at") or j.get("id") or 0, reverse=True)
+        else:
+            shortlist_filtered.sort(key=lambda j: j.get("evaluation", {}).get("match_score", 0), reverse=True)
+
+        if not shortlist_filtered:
+            st.info("💡 No matching job cards found for the selected filters. Click '⚡ RUN JOB PIPELINE 🚀' to scan portals.")
+        else:
+            st.caption(f"Displaying **{len(shortlist_filtered)}** job card(s)")
+
+            # Render Modern Job Cards
+            for idx, job in enumerate(shortlist_filtered):
+                render_job_card(job, idx)
 
 # -----------------------------------------------------------------------------
 # TAB 2: User Profile (Completeness Progress Bar & Two-Column Layout)
@@ -261,18 +395,24 @@ with tab2:
     st.markdown("## Candidate Profile & Resume Parser")
     st.caption("Manage candidate details, parse uploaded resumes, and view AI skill recommendations.")
 
-    existing_profile = load_profile_from_json()
+    # Privacy Banner
+    st.info(
+        "🔒 **Session Privacy Protected:** Uploaded resumes and personal details exist strictly during your active browser session. "
+        "Once you close this site or browser tab, all resume text and candidate details are automatically removed and never saved to the server."
+    )
+
+    existing_profile = get_session_profile()
 
     # Profile Completeness Calculation
     filled_fields = 0
     total_fields = 6
     if existing_profile:
-        if existing_profile.name: filled_fields += 1
+        if existing_profile.name and existing_profile.name.strip(): filled_fields += 1
         if existing_profile.skills: filled_fields += 1
         if existing_profile.preferred_roles: filled_fields += 1
-        if existing_profile.experience_years is not None: filled_fields += 1
+        if existing_profile.experience_years is not None and existing_profile.experience_years > 0: filled_fields += 1
         if existing_profile.locations: filled_fields += 1
-        if existing_profile.raw_resume_text: filled_fields += 1
+        if existing_profile.raw_resume_text and existing_profile.raw_resume_text.strip(): filled_fields += 1
 
     completeness_pct = int((filled_fields / total_fields) * 100)
 
@@ -283,7 +423,7 @@ with tab2:
 
     # Recommended Skill Additions
     curr_skills = existing_profile.skills if existing_profile else []
-    skill_recs = get_recommended_profile_skills(curr_skills, min_occurrences=1)
+    skill_recs = get_recommended_profile_skills(curr_skills, min_occurrences=1) if curr_skills else []
 
     if skill_recs:
         st.markdown("<div class='card-wrapper'>", unsafe_allow_html=True)
@@ -296,9 +436,8 @@ with tab2:
                     if existing_profile:
                         if rec['skill'] not in existing_profile.skills:
                             existing_profile.skills.append(rec['skill'])
-                            save_profile_to_json(existing_profile)
-                            save_profile_to_db(existing_profile)
-                            st.toast(f"Added '{rec['skill']}' to profile!", icon="🎉")
+                            st.session_state["session_profile"] = existing_profile
+                            st.toast(f"Added '{rec['skill']}' to session profile!", icon="🎉")
                             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -321,7 +460,6 @@ with tab2:
             try:
                 from profile.resume_parser import extract_text_from_resume
                 from profile.resume_analyzer import analyze_resume_text
-                from storage.vector_store import store_resume_vector
 
                 file_bytes = uploaded_resume.getvalue()
                 extracted_text = extract_text_from_resume(file_bytes, uploaded_resume.name)
@@ -346,11 +484,10 @@ with tab2:
                             existing_profile.locations = list(dict.fromkeys([l.strip() for l in parsed.locations if l.strip()]))
 
                         existing_profile.raw_resume_text = extracted_text
-                        save_profile_to_json(existing_profile)
-                        save_profile_to_db(existing_profile)
-                        store_resume_vector(user_name=existing_profile.name, resume_text=extracted_text)
+                        st.session_state["session_profile"] = existing_profile
+                        st.session_state["resume_uploaded"] = True
                         st.session_state[session_key] = True
-                        st.toast("Profile updated from uploaded resume!", icon="✅")
+                        st.toast("Profile updated from uploaded resume (Session Active)!", icon="✅")
                         st.rerun()
             except Exception as e:
                 st.error(f"Failed to parse resume: {str(e)}")
@@ -358,6 +495,20 @@ with tab2:
         if existing_profile and existing_profile.raw_resume_text:
             with st.expander("Preview Raw Resume Text"):
                 st.text_area("Raw Text", value=existing_profile.raw_resume_text, height=220, label_visibility="collapsed")
+            st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+            if st.button("⚡ Run Job Pipeline with this Resume Now 🚀", type="primary", key="tab2_run_pipeline_btn", use_container_width=True):
+                with st.spinner("Executing job search scraper & LLM matching pipeline..."):
+                    try:
+                        from run_pipeline import main as execute_pipeline
+                        final_state = execute_pipeline(profile=existing_profile)
+                        new_run_id = final_state.get("run_id") if isinstance(final_state, dict) else None
+                        st.session_state["pipeline_run_completed"] = True
+                        st.session_state["current_run_id"] = new_run_id
+                        st.cache_data.clear()
+                        st.toast("Pipeline complete! Matching jobs synced for this session.", icon="🎉")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Pipeline execution failed: {str(e)}")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with prof_col2:
@@ -372,16 +523,16 @@ with tab2:
                 "Years of Experience",
                 min_value=0.0,
                 max_value=10.0,
-                value=existing_profile.experience_years if existing_profile else 0.0,
+                value=float(existing_profile.experience_years) if existing_profile and existing_profile.experience_years is not None else 0.0,
                 step=0.5,
                 help="0 years for fresh graduates and students seeking entry-level/internship roles",
             )
 
             c_sal1, c_sal2 = st.columns(2)
             with c_sal1:
-                min_salary = st.number_input("Minimum Target Salary ($)", min_value=0.0, value=existing_profile.min_salary or 0.0 if existing_profile else 0.0, step=5000.0)
+                min_salary = st.number_input("Minimum Target Salary ($)", min_value=0.0, value=float(existing_profile.min_salary or 0.0) if existing_profile else 0.0, step=5000.0)
             with c_sal2:
-                max_salary = st.number_input("Maximum Target Salary ($)", min_value=0.0, value=existing_profile.max_salary or 0.0 if existing_profile else 0.0, step=5000.0)
+                max_salary = st.number_input("Maximum Target Salary ($)", min_value=0.0, value=float(existing_profile.max_salary or 0.0) if existing_profile else 0.0, step=5000.0)
 
             locations = st.text_input("Preferred Locations (comma-separated)", value=", ".join(existing_profile.locations) if existing_profile else "")
             remote_ok = st.checkbox("Open to Remote Roles", value=existing_profile.remote_ok if existing_profile else True)
@@ -390,7 +541,7 @@ with tab2:
             with c_btn1:
                 submitted = st.form_submit_button("💾 Save Profile Settings", type="primary", use_container_width=True)
             with c_btn2:
-                cleared = st.form_submit_button("🧹 Clear Form Details", type="secondary", use_container_width=True)
+                cleared = st.form_submit_button("🧹 Clear Resume & Details", type="secondary", use_container_width=True)
 
             if submitted:
                 if not name:
@@ -405,11 +556,11 @@ with tab2:
                         max_salary=max_salary if max_salary > 0 else None,
                         locations=[l.strip() for l in locations.split(",") if l.strip()],
                         remote_ok=remote_ok,
+                        raw_resume_text=existing_profile.raw_resume_text if existing_profile else "",
                     )
-                    save_profile_to_json(profile)
-                    save_profile_to_db(profile)
-                    st.toast("Profile settings saved successfully!", icon="✅")
-                    st.success("Profile saved successfully!")
+                    st.session_state["session_profile"] = profile
+                    st.toast("Profile saved for current session!", icon="✅")
+                    st.success("Profile saved for your active session! (Cleared when site is closed)")
                     st.rerun()
 
             if cleared:
@@ -424,9 +575,14 @@ with tab2:
                     remote_ok=True,
                     raw_resume_text="",
                 )
-                save_profile_to_json(empty_profile)
-                save_profile_to_db(empty_profile)
-                st.toast("Candidate form details cleared!", icon="🧹")
+                st.session_state["session_profile"] = empty_profile
+                st.session_state["pipeline_run_completed"] = False
+                st.session_state["current_run_id"] = None
+                st.session_state["resume_uploaded"] = False
+                for k in list(st.session_state.keys()):
+                    if k.startswith("parsed_resume_"):
+                        del st.session_state[k]
+                st.toast("Resume and form details cleared!", icon="🧹")
                 st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
@@ -438,10 +594,13 @@ with tab3:
     st.markdown("## Application Tracker")
     st.caption("Manage job applications through all stages from Discovery to Offers.")
 
-    shortlist_all = load_shortlist_from_db()
+    if not st.session_state.get("pipeline_run_completed") or not st.session_state.get("current_run_id"):
+        shortlist_all = []
+    else:
+        shortlist_all = load_shortlist_from_db(run_id=st.session_state.get("current_run_id"))
 
     if not shortlist_all:
-        st.info("No job applications stored in database yet. Run the pipeline to populate jobs.")
+        st.info("📋 No job applications in this session yet. Upload your resume in the **👤 User Profile** tab and run the pipeline to start tracking jobs.")
     else:
         # Table List View
         status_opts = ["All Statuses", "new", "seen", "applied", "interviewing", "rejected", "offer"]
@@ -511,126 +670,136 @@ with tab4:
     st.markdown("## Application Analytics & Funnel Insights")
     st.caption("Track match distributions, response rates, and identified skill gap insights.")
 
-    analytics = get_application_analytics()
-
-    # AI Insight Banner
-    st.markdown(
-        """
-        <div class="ai-insight-box">
-            <div style="font-size: 1.5rem; width: 42px; height: 42px; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 14px rgba(99, 102, 241, 0.3);">💡</div>
-            <div>
-                <div class="ai-insight-title">AI Profile Optimization Insight</div>
-                <div class="ai-insight-desc">Adding <b>Docker</b>, <b>CI/CD</b>, or <b>TypeScript</b> to your profile skill set will increase your match score by ~20% across entry-level developer roles.</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # 4 Analytics Metrics
-    a1, a2, a3, a4 = st.columns(4)
-    with a1:
-        avg_app = f"{analytics['avg_applied_score']}%" if analytics["avg_applied_score"] is not None else "N/A"
-        render_kpi_card("Avg Match (Applied)", avg_app, "Applied job pool", icon="📈")
-    with a2:
-        avg_io = f"{analytics['avg_interview_offer_score']}%" if analytics["avg_interview_offer_score"] is not None else "N/A"
-        render_kpi_card("Avg Match (Interviews)", avg_io, "High confidence shortlist", icon="🎯")
-    with a3:
-        render_kpi_card("Total Tracked Apps", str(analytics["total_applied_count"]), "Active job applications", icon="📋")
-    with a4:
-        render_kpi_card("Interviews / Offers", str(analytics["total_interview_offer_count"]), "Positive responses", icon="🎉")
-
-    st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
-
-    col_ch1, col_ch2 = st.columns(2)
-
-    # Chart 1: Donut Chart of Status Breakdown
-    with col_ch1:
-        st.markdown("<div class='card-wrapper'>", unsafe_allow_html=True)
-        st.markdown("### Application Funnel Status")
-        status_cnts = analytics.get("status_counts", {})
-        if status_cnts and sum(status_cnts.values()) > 0:
-            df_status = pd.DataFrame([{"Status": k.upper(), "Count": v} for k, v in status_cnts.items() if v > 0])
-            fig_pie = px.pie(
-                df_status,
-                values="Count",
-                names="Status",
-                hole=0.48,
-                color_discrete_sequence=["#6366F1", "#8B5CF6", "#06B6D4", "#10B981", "#F59E0B", "#F43F5E"],
-            )
-            fig_pie.update_layout(
-                font=dict(family="Inter", color="#F8FAFC"),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(t=20, b=20, l=20, r=20),
-                height=290,
-                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5, font=dict(color="#CBD5E1"))
-            )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#0B0F19', width=2)))
-            st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("No status breakdown data available yet.")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # Chart 2: Match Score Distribution Histogram
-    with col_ch2:
-        st.markdown("<div class='card-wrapper'>", unsafe_allow_html=True)
-        st.markdown("### Match Score Distribution")
-        scores = [j.get("evaluation", {}).get("match_score", 0) for j in load_shortlist_from_db()]
-        if scores:
-            df_scores = pd.DataFrame({"Match Score": scores})
-            fig_hist = px.histogram(
-                df_scores,
-                x="Match Score",
-                nbins=10,
-                color_discrete_sequence=["#6366F1"],
-                labels={"Match Score": "Match Score (%)"},
-            )
-            fig_hist.update_layout(
-                font=dict(family="Inter", color="#F8FAFC"),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(t=20, b=20, l=20, r=20),
-                height=290,
-                yaxis_title="Job Count",
-                xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", tickfont=dict(color="#CBD5E1")),
-                yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", tickfont=dict(color="#CBD5E1")),
-            )
-            fig_hist.update_traces(marker_line_color="#8B5CF6", marker_line_width=1, opacity=0.9)
-            st.plotly_chart(fig_hist, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("No match score distribution available.")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # Chart 3: Frequent Missing Skills Bar Chart
-    st.markdown("<div class='card-wrapper'>", unsafe_allow_html=True)
-    st.markdown("### Frequently Missing Skills Across Applications")
-    rejection_skills = analytics.get("frequent_rejection_missing_skills", [])
-    if rejection_skills:
-        df_skills = pd.DataFrame(rejection_skills, columns=["Skill", "Count"])
-        fig_bar = px.bar(
-            df_skills,
-            x="Count",
-            y="Skill",
-            orientation="h",
-            color="Count",
-            color_continuous_scale=["#818CF8", "#6366F1", "#4F46E5"],
-        )
-        fig_bar.update_layout(
-            font=dict(family="Inter", color="#F8FAFC"),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(t=20, b=20, l=20, r=20),
-            height=270,
-            yaxis=dict(autorange="reversed", showgrid=False, tickfont=dict(color="#CBD5E1")),
-            xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", tickfont=dict(color="#CBD5E1")),
-            coloraxis_showscale=False
-        )
-        fig_bar.update_traces(marker_line_color="#8B5CF6", marker_line_width=1)
-        st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
+    if not st.session_state.get("pipeline_run_completed") or not st.session_state.get("current_run_id"):
+        st.info("📊 No pipeline data to analyze in this session yet. Upload your resume in the **👤 User Profile** tab and run the pipeline to generate match analytics.")
     else:
-        st.info("✨ No recurring missing skill gaps detected! Your profile matches current job postings well.")
-    st.markdown("</div>", unsafe_allow_html=True)
+        current_run = st.session_state.get("current_run_id")
+        try:
+            analytics = get_application_analytics(run_id=current_run)
+        except TypeError:
+            try:
+                analytics = get_application_analytics(None, current_run)
+            except Exception:
+                analytics = get_application_analytics()
+
+        # AI Insight Banner
+        st.markdown(
+            """
+            <div class="ai-insight-box">
+                <div style="font-size: 1.5rem; width: 42px; height: 42px; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 14px rgba(99, 102, 241, 0.3);">💡</div>
+                <div>
+                    <div class="ai-insight-title">AI Profile Optimization Insight</div>
+                    <div class="ai-insight-desc">Adding <b>Docker</b>, <b>CI/CD</b>, or <b>TypeScript</b> to your profile skill set will increase your match score by ~20% across entry-level developer roles.</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # 4 Analytics Metrics
+        a1, a2, a3, a4 = st.columns(4)
+        with a1:
+            avg_app = f"{analytics['avg_applied_score']}%" if analytics["avg_applied_score"] is not None else "N/A"
+            render_kpi_card("Avg Match (Applied)", avg_app, "Applied job pool", icon="📈")
+        with a2:
+            avg_io = f"{analytics['avg_interview_offer_score']}%" if analytics["avg_interview_offer_score"] is not None else "N/A"
+            render_kpi_card("Avg Match (Interviews)", avg_io, "High confidence shortlist", icon="🎯")
+        with a3:
+            render_kpi_card("Total Tracked Apps", str(analytics["total_applied_count"]), "Active job applications", icon="📋")
+        with a4:
+            render_kpi_card("Interviews / Offers", str(analytics["total_interview_offer_count"]), "Positive responses", icon="🎉")
+
+        st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
+
+        col_ch1, col_ch2 = st.columns(2)
+
+        # Chart 1: Donut Chart of Status Breakdown
+        with col_ch1:
+            st.markdown("<div class='card-wrapper'>", unsafe_allow_html=True)
+            st.markdown("### Application Funnel Status")
+            status_cnts = analytics.get("status_counts", {})
+            if status_cnts and sum(status_cnts.values()) > 0:
+                df_status = pd.DataFrame([{"Status": k.upper(), "Count": v} for k, v in status_cnts.items() if v > 0])
+                fig_pie = px.pie(
+                    df_status,
+                    values="Count",
+                    names="Status",
+                    hole=0.48,
+                    color_discrete_sequence=["#6366F1", "#8B5CF6", "#06B6D4", "#10B981", "#F59E0B", "#F43F5E"],
+                )
+                fig_pie.update_layout(
+                    font=dict(family="Inter", color="#F8FAFC"),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    margin=dict(t=20, b=20, l=20, r=20),
+                    height=290,
+                    legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5, font=dict(color="#CBD5E1"))
+                )
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label', marker=dict(line=dict(color='#0B0F19', width=2)))
+                st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
+            else:
+                st.info("No status breakdown data available yet.")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # Chart 2: Match Score Distribution Histogram
+        with col_ch2:
+            st.markdown("<div class='card-wrapper'>", unsafe_allow_html=True)
+            st.markdown("### Match Score Distribution")
+            scores = [j.get("evaluation", {}).get("match_score", 0) for j in load_shortlist_from_db(run_id=current_run)]
+            if scores:
+                df_scores = pd.DataFrame({"Match Score": scores})
+                fig_hist = px.histogram(
+                    df_scores,
+                    x="Match Score",
+                    nbins=10,
+                    color_discrete_sequence=["#6366F1"],
+                    labels={"Match Score": "Match Score (%)"},
+                )
+                fig_hist.update_layout(
+                    font=dict(family="Inter", color="#F8FAFC"),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    margin=dict(t=20, b=20, l=20, r=20),
+                    height=290,
+                    yaxis_title="Job Count",
+                    xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", tickfont=dict(color="#CBD5E1")),
+                    yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", tickfont=dict(color="#CBD5E1")),
+                )
+                fig_hist.update_traces(marker_line_color="#8B5CF6", marker_line_width=1, opacity=0.9)
+                st.plotly_chart(fig_hist, use_container_width=True, config={"displayModeBar": False})
+            else:
+                st.info("No match score distribution available.")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # Chart 3: Frequent Missing Skills Bar Chart
+        st.markdown("<div class='card-wrapper'>", unsafe_allow_html=True)
+        st.markdown("### Frequently Missing Skills Across Applications")
+        rejection_skills = analytics.get("frequent_rejection_missing_skills", [])
+        if rejection_skills:
+            df_skills = pd.DataFrame(rejection_skills, columns=["Skill", "Count"])
+            fig_bar = px.bar(
+                df_skills,
+                x="Count",
+                y="Skill",
+                orientation="h",
+                color="Count",
+                color_continuous_scale=["#818CF8", "#6366F1", "#4F46E5"],
+            )
+            fig_bar.update_layout(
+                font=dict(family="Inter", color="#F8FAFC"),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=20, b=20, l=20, r=20),
+                height=270,
+                yaxis=dict(autorange="reversed", showgrid=False, tickfont=dict(color="#CBD5E1")),
+                xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", tickfont=dict(color="#CBD5E1")),
+                coloraxis_showscale=False
+            )
+            fig_bar.update_traces(marker_line_color="#8B5CF6", marker_line_width=1)
+            st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("✨ No recurring missing skill gaps detected! Your profile matches current job postings well.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
 # TAB 5: Pipeline Settings (Grouped Cards & MCP Health Check)
