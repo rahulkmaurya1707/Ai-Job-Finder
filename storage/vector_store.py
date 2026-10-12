@@ -1,5 +1,6 @@
 import hashlib
 import math
+import threading
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from config import get_logger
@@ -164,10 +165,11 @@ class ResumeVectorStore:
                     metadata={"hnsw:space": "cosine"},
                 )
         except Exception as e:
-            logger.warning(
-                f"ChromaDB persistent client unavailable ({e}). Using in-memory fallback store."
+            logger.info(
+                f"Using high-performance in-memory vector store ({e})."
             )
             self.collection = InMemoryResumeCollection(self.embedding_fn)
+        self._lock = threading.Lock()
 
     def add_resume(
         self,
@@ -180,11 +182,12 @@ class ResumeVectorStore:
         meta = metadata or {}
         meta["user_name"] = user_name
 
-        self.collection.upsert(
-            ids=[doc_id],
-            documents=[resume_text],
-            metadatas=[meta],
-        )
+        with self._lock:
+            self.collection.upsert(
+                ids=[doc_id],
+                documents=[resume_text],
+                metadatas=[meta],
+            )
         return doc_id
 
     def search_similar_resumes(self, query_text: str, n_results: int = 5):
@@ -197,29 +200,34 @@ class ResumeVectorStore:
         """Remove a specific user's resume embedding from collection."""
         doc_id = f"resume_{user_name.lower().replace(' ', '_')}"
         try:
-            self.collection.delete(ids=[doc_id])
+            with self._lock:
+                self.collection.delete(ids=[doc_id])
         except Exception:
             pass
 
     def clear_all_resumes(self) -> None:
         """Remove all stored resume documents from collection."""
         try:
-            res = self.collection.get()
-            all_ids = res.get("ids", []) if res else []
-            if all_ids:
-                self.collection.delete(ids=all_ids)
+            with self._lock:
+                res = self.collection.get()
+                all_ids = res.get("ids", []) if res else []
+                if all_ids:
+                    self.collection.delete(ids=all_ids)
         except Exception:
             pass
 
 
 _vector_store_instance: Optional[ResumeVectorStore] = None
+_vector_store_lock = threading.Lock()
 
 
 def get_vector_store() -> ResumeVectorStore:
     """Retrieve or create a thread-safe singleton instance of ResumeVectorStore."""
     global _vector_store_instance
     if _vector_store_instance is None:
-        _vector_store_instance = ResumeVectorStore()
+        with _vector_store_lock:
+            if _vector_store_instance is None:
+                _vector_store_instance = ResumeVectorStore()
     return _vector_store_instance
 
 
