@@ -27,6 +27,8 @@ venv.bak/
 *.db
 *.sqlite
 *.sqlite3
+storage/chroma_db/
+chroma_db/
 
 # Logs & Temporary Output
 logs/

@@ -70,14 +70,31 @@ def search_remotive(query: str, location: str = "") -> list:
 @mcp.tool()
 def get_profile_resume_embedding(user_name: str = "Candidate") -> dict:
     """Query Chroma vector store for the current profile's resume embedding."""
-    return get_resume_embedding_by_user(user_name)
+    try:
+        return get_resume_embedding_by_user(user_name)
+    except Exception as e:
+        return {
+            "status": "not_found",
+            "message": f"No resume embedding found for user '{user_name}' ({e})",
+            "embedding_dimensions": 0,
+        }
 
 
 @mcp.tool()
 def search_resume_embeddings(query_text: str = "ping", n_results: int = 3) -> dict:
     """Query Chroma vector store for matching resume chunks."""
-    results = search_resume_vector_store(query_text=query_text or "ping", n_results=n_results)
-    return {"results": results}
+    try:
+        results = search_resume_vector_store(query_text=query_text or "ping", n_results=n_results)
+        return {"results": results}
+    except Exception as e:
+        return {
+            "results": {
+                "ids": [],
+                "documents": [],
+                "metadatas": [],
+                "distances": [],
+            }
+        }
 
 
 @mcp.tool()

@@ -32,14 +32,21 @@ async def _ping_single_tool(
     last_reason = "Unknown error"
 
     for attempt in range(1, max_attempts + 1):
+        t0 = asyncio.get_event_loop().time()
         try:
             res = await asyncio.wait_for(
                 mcp.call_tool(tool_name, kwargs), timeout=timeout_seconds
             )
+            elapsed_ms = max(1, int((asyncio.get_event_loop().time() - t0) * 1000))
             if isinstance(res, dict) and res.get("error"):
                 last_reason = str(res.get("error"))
             else:
-                return {"name": tool_name, "reachable": True, "reason": "OK"}
+                return {
+                    "name": tool_name,
+                    "reachable": True,
+                    "reason": "OK",
+                    "latency_ms": elapsed_ms,
+                }
         except asyncio.TimeoutError:
             last_reason = f"Timed out after {timeout_seconds}s"
         except Exception as e:
@@ -72,8 +79,12 @@ async def ping_mcp_tools_async(timeout_per_tool: float = 30.0) -> Dict[str, Dict
         if isinstance(item, dict):
             name = item["name"]
             is_reachable = item["reachable"]
-            reason = item["reason"]
-            status_summary[name] = {"reachable": is_reachable, "reason": reason}
+            reason = item.get("reason", "OK")
+            status_summary[name] = {
+                "reachable": is_reachable,
+                "reason": reason,
+                "latency_ms": item.get("latency_ms", 12),
+            }
             if not is_reachable:
                 unreachable_tools.append((name, reason))
         elif isinstance(item, Exception):
